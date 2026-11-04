@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────────────────────
+#  watch.yaml — the topic definition for this watcher.
+#  This is the ONLY file you should need to change to point the
+#  same agent at a different topic (see TEMPLATE.md).
+#  It is read by the agent, not by code.
+# ─────────────────────────────────────────────────────────────
+
+topic:
+  id: amigabot
+  name: Amigabot
+  tagline: Signals from the retro Amiga scene
+  scope: >
+    The living Commodore Amiga scene: new hardware (replicas, accelerators,
+    FPGA machines), new and ported games, demoscene parties and releases,
+    OS and application software (AmigaOS 3.x/4.x, AROS, MorphOS),
+    emulators, magazines and events, and the business/legal story of the
+    Amiga and Commodore names.
+  out_of_scope: >
+    Generic retro-gaming news with no Amiga angle, auction listings and
+    individual for-sale posts, rumour with no named source.
+
+cadence:
+  sweep: daily          # morning sweep; see scripts/sweep.sh
+  digest: weekly        # Friday "transmission" digest page in HQ
+  lookback_days: 7      # on a cold start, how far back to look
+
+# Beats are the lenses everything gets filed under. Keep it to ~6-8.
+# `icon` is a key into the page's pixel-icon set (index.html).
+beats:
+  - { id: hardware,  label: Hardware,  icon: chip,    about: "replicas, accelerators, FPGA, repairs, new boards" }
+  - { id: games,     label: Games,     icon: joy,     about: "new releases, ports, remakes, Kickstarters" }
+  - { id: scene,     label: Scene,     icon: disk,    about: "demoparties, demos, intros, music, graphics" }
+  - { id: software,  label: Software,  icon: wb,      about: "OS releases, apps, tools, browsers, dev tools" }
+  - { id: emulation, label: Emulation, icon: screen,  about: "WinUAE, FS-UAE, vAmiga, Amiberry, MiSTer cores" }
+  - { id: events,    label: Events,    icon: flag,    about: "shows, meetups, conventions, talks" }
+  - { id: press,     label: Press,     icon: mag,     about: "magazines, books, documentaries, interviews" }
+  - { id: biz,       label: Business,  icon: key,     about: "names, rights, licensing, companies" }
+
+# Sources, best first. Agent should check every `primary` source each sweep,
+# and rotate through `secondary` ones. Prefer the original source over a
+# re-report when both exist.
+sources:
+  primary:
+    - { name: amiga-news.de,      url: "https://www.amiga-news.de/en/",                   kind: news }
+    - { name: Amiga Future,       url: "https://www.amigafuture.de/app.php/newsportal/",  kind: news }
+    - { name: Amigans.net,        url: "https://www.amigans.net/",                        kind: news }
+    - { name: GenerationAmiga,    url: "https://www.generationamiga.com/category/amiga-news/", kind: news }
+    - { name: Indie Retro News,   url: "https://www.indieretronews.com/search/label/Amiga", kind: games }
+    - { name: Demozoo (parties),  url: "https://demozoo.org/parties/",                    kind: scene }
+  secondary:
+    - { name: Time Extension,     url: "https://www.timeextension.com/tags/amiga",        kind: press }
+    - { name: Lemon Amiga forum,  url: "https://www.lemonamiga.com/forum/",               kind: games }
+    - { name: English Amiga Board,url: "https://eab.abime.net/",                          kind: community }
+    - { name: Amiga.org forum,    url: "https://forum.amiga.org/",                        kind: community }
+    - { name: Pouët (Amiga),      url: "https://www.pouet.net/prodlist.php?platform[]=Amiga+OCS/ECS&platform[]=Amiga+AGA", kind: scene }
+    - { name: Retro Games Ltd,    url: "https://retrogames.biz/news/",                    kind: vendor }
+  search_queries:        # run each sweep with WebSearch, "standard" mode
+    - "Amiga news this week"
+    - "new Amiga game release"
+    - "Amiga demoparty results"
+    - "AmigaOS release"
+    - "Amiga FPGA accelerator"
+
+# Heat: how much a signal matters, 1-5. The page sizes items by it.
+heat_rubric:
+  5: "scene-shaping — new machine ships, rights change hands, major OS release"
+  4: "big for its beat — notable game release, party winner, notable hardware rev"
+  3: "worth knowing — solid release, update, event announcement"
+  2: "texture — small update, minor port, community item"
+  1: "footnote — keep for completeness"
+
+# Threads are ongoing stories the agent keeps following across sweeps.
+# Each one is also a Sentinel issue labelled `thread`. See data/threads.json.
+threads_max_open: 8

@@ -1,0 +1,10 @@
+# Decibel Project Manifest
+# Generated: 2026-11-04T17:20:00.000Z
+
+id: amigabot
+name: Amigabot
+version: 0.1.0
+description: Agentic watcher for the retro Amiga scene - sweeps sources, files signals, follows threads, publishes a retro visual feed, reports to HQ. Template for future watchers.
+
+created_at: 2026-11-04T17:20:00.000Z
+decibel_version: "1.0"

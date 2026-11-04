@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+
+# Logs
+*.log
+.playwright-mcp/
+
+# Scratch from sweeps (raw fetches never get committed)
+scratch/
+feed.js
