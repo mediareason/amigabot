@@ -5,244 +5,395 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Amigabot</title>
 <meta name="description" content="Amigabot keeps tabs on the retro Amiga scene. Built by Decibel.">
+<meta name="theme-color" content="#07051a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <style>
-  /* Workbench 1.3 palette — four colours, like the real thing */
   :root {
-    --blue:   #0055aa;
-    --white:  #ffffff;
-    --black:  #000022;
-    --orange: #ff8800;
-    --blue-d: #003f80;
+    --ink: #07051a; --panel: #140d33; --panel-2: #0b0722;
+    --hi: #a99af0; --lo: #22164e;
+    --text: #ece6ff; --dim: #a79cd0;
+    --orange: #ff9a3a; --cyan: #7ad0ff; --gold: #ffd36a;
     --font: 'VT323', 'Courier New', monospace;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; }
   body {
-    background: var(--blue);
-    color: var(--white);
-    font: 22px/1.15 var(--font);
-    -webkit-font-smoothing: none;
-    image-rendering: pixelated;
-    min-height: 100vh;
+    background: var(--ink); color: var(--text);
+    font: 22px/1.15 var(--font); min-height: 100vh;
+    background-image:
+      radial-gradient(ellipse at 50% 0%, #1d1050 0%, transparent 60%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,.015) 0 1px, transparent 1px 3px);
   }
-  a { color: var(--white); }
-  a:hover { color: var(--orange); }
-  button { font: inherit; cursor: pointer; }
+  a { color: var(--cyan); }
+  a:hover { color: var(--gold); }
+  button { font: inherit; cursor: pointer; color: inherit; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-  /* ── screen title bar ───────────────────────── */
-  .screenbar {
-    position: sticky; top: 0; z-index: 5;
-    display: flex; gap: 18px; align-items: center;
-    background: var(--white); color: var(--blue);
-    padding: 1px 10px; white-space: nowrap; overflow: hidden;
-    border-bottom: 2px solid var(--black);
+  /* ── top bar ───────────────────────────────── */
+  .bar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; gap: 16px; align-items: center; padding: 2px 12px;
+    background: linear-gradient(#2a1d66, #160e3c); border-bottom: 2px solid #000;
+    white-space: nowrap; overflow: hidden;
   }
-  .screenbar b { color: var(--black); font-weight: normal; }
-  .screenbar .grow { flex: 1; }
-  .screenbar .depth { display: flex; gap: 2px; }
-  .screenbar .depth i { display: block; width: 18px; height: 16px; border: 2px solid var(--blue); }
-  .screenbar .depth i:last-child { background: var(--blue); }
+  .bar b { font-weight: normal; letter-spacing: 1px; }
+  .bar .grow { flex: 1; }
+  .bar .dim { color: var(--dim); }
+  .sound { background: #0b0722; border: 2px solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi); padding: 0 8px; }
+  .sound[aria-pressed="true"] { color: #120400; background: var(--orange); }
+  @media (max-width: 680px) { .bar .hide-sm { display: none; } }
 
-  /* ── copper bars + scroller ─────────────────── */
-  .copper { position: relative; height: 120px; background: var(--black); overflow: hidden; }
-  .copper canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-
-  /* ── desktop layout ─────────────────────────── */
-  .desk {
-    display: grid; gap: 18px;
-    grid-template-columns: 132px minmax(0, 1fr) 340px;
-    padding: 18px 16px 40px;
-    max-width: 1440px; margin: 0 auto;
+  /* ── the demo screen ───────────────────────── */
+  .stage { background: #000; border-bottom: 3px solid #000; box-shadow: 0 2px 0 #2a1d66; }
+  .crt { position: relative; margin: 0 auto; max-width: calc(76vh * 384 / 216); cursor: pointer; }
+  .crt canvas { display: block; width: 100%; height: auto; aspect-ratio: 384 / 216; image-rendering: pixelated; image-rendering: crisp-edges; }
+  .crt::after { /* scanlines locked to the 216 native rows */
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(rgba(0,0,0,0) 55%, rgba(0,0,0,.26) 55%);
+    background-size: 100% calc(100% / 216);
   }
-  @media (max-width: 1100px) { .desk { grid-template-columns: 112px minmax(0, 1fr); } .side { grid-column: 1 / -1; } }
-  @media (max-width: 680px)  {
-    body { font-size: 20px; }
-    .desk { grid-template-columns: minmax(0, 1fr); padding: 12px 16px 32px; }
-    .drawers { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; }
-    .icon svg { width: 36px; height: 36px; }
-    .icon span { font-size: .85em; }
-    .signals .sig { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-    .signals .sig .heat { padding-top: 0; }
-    .screenbar .hide-sm { display: none; }
-  }
+  .crt::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1; box-shadow: inset 0 0 90px rgba(0,0,0,.55); }
 
-  /* ── drawer icons ───────────────────────────── */
-  .drawers { display: flex; flex-direction: column; gap: 6px; }
-  .icon {
-    background: none; border: 0; color: var(--white); padding: 4px 2px;
-    display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center;
+  /* ── content ───────────────────────────────── */
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 20px 16px 40px; }
+  .beats { display: flex; gap: 10px; overflow-x: auto; padding: 4px 4px 12px; scrollbar-width: thin; }
+  .beat {
+    flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    min-width: 92px; padding: 6px 6px 4px;
+    background: linear-gradient(#1d1446, #0e0928);
+    border: 2px solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi); outline: 2px solid #000;
   }
-  .icon svg { width: 48px; height: 48px; }
-  .icon span { padding: 0 4px; }
-  .icon .n { color: var(--orange); }
-  .icon[aria-pressed="true"] span { background: var(--white); color: var(--blue); }
-  .icon[aria-pressed="true"] .n { color: var(--orange); }
-  .icon[aria-pressed="true"] svg { filter: invert(1) hue-rotate(180deg); }
-  .icon:focus-visible { outline: 2px dashed var(--orange); }
+  .beat svg { width: 40px; height: 40px; }
+  .beat .n { color: var(--orange); }
+  .beat[aria-pressed="true"] { background: linear-gradient(#ffb04a, #c2401a); color: #120400; border-color: #ffe0a0 #6a1a00 #6a1a00 #ffe0a0; }
+  .beat[aria-pressed="true"] .n { color: #fff; }
+  .beat:focus-visible, .chk:focus-visible, .sound:focus-visible { outline: 2px dashed var(--gold); }
 
-  /* ── windows ────────────────────────────────── */
-  .win { border: 2px solid var(--white); background: var(--blue); min-width: 0; }
-  .win + .win { margin-top: 18px; }
-  .titlebar {
-    display: flex; align-items: center; gap: 8px; height: 26px;
-    background: repeating-linear-gradient(to bottom, var(--white) 0 2px, var(--blue) 2px 4px);
-    border-bottom: 2px solid var(--white); padding: 0 4px;
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 22px; margin-top: 10px; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+  .panel { background: linear-gradient(180deg, var(--panel), var(--panel-2)); border: 3px solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi); outline: 2px solid #000; min-width: 0; }
+  .panel + .panel { margin-top: 22px; }
+  .ph { display: flex; align-items: baseline; gap: 12px; padding: 6px 12px 4px; border-bottom: 2px solid #000; background: linear-gradient(#2a1d66, #1a1046); }
+  .ph .grow { flex: 1; }
+  .chrome {
+    margin: 0; font-weight: normal; font-size: 1.5em; line-height: 1; letter-spacing: 1px;
+    background: linear-gradient(180deg, #3046c0 0 18%, #8ad8ff 18% 36%, #ffffff 36% 48%, #4a2410 48% 56%, #a8621e 56% 72%, #ffb040 72% 88%, #fff0a0 88%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(2px 2px 0 #000);
   }
-  .titlebar .close { width: 22px; height: 18px; background: var(--blue); border: 2px solid var(--white); display: grid; place-items: center; }
-  .titlebar .close::after { content: ''; width: 6px; height: 6px; background: var(--white); }
-  .titlebar h2 { margin: 0; font-size: inherit; font-weight: normal; background: var(--blue); padding: 0 6px; }
-  .titlebar .grow { flex: 1; }
-  .titlebar .gad { width: 22px; height: 18px; background: var(--blue); border: 2px solid var(--white); position: relative; }
-  .titlebar .gad::after { content: ''; position: absolute; left: 3px; top: 2px; width: 9px; height: 7px; border: 2px solid var(--white); }
-  .body { padding: 10px 12px; }
+  .pb { padding: 10px 12px; }
 
-  /* ── signals list ───────────────────────────── */
-  .filterline { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; padding: 6px 12px; border-bottom: 2px solid var(--white); }
-  .filterline .grow { flex: 1; }
-  .chk { background: none; border: 0; color: var(--white); padding: 0; }
+  .filters { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; padding: 6px 12px; border-bottom: 2px solid #000; }
+  .filters .grow { flex: 1; }
+  .chk { background: none; border: 0; padding: 0; color: var(--text); }
   .chk::before { content: '[ ] '; color: var(--orange); }
   .chk[aria-pressed="true"]::before { content: '[x] '; }
-  .signals { list-style: none; margin: 0; padding: 0; }
-  .sig { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 4px 14px; padding: 12px; border-bottom: 2px dotted rgba(255,255,255,.35); }
-  .sig:last-child { border-bottom: 0; }
-  .sig .heat { display: flex; gap: 3px; align-items: center; padding-top: 6px; }
-  .sig .heat i { width: 10px; height: 14px; border: 2px solid var(--white); }
-  .sig .heat i.on { background: var(--orange); border-color: var(--orange); }
-  .sig .meta { color: var(--orange); font-size: .9em; display: flex; flex-wrap: wrap; gap: 0 12px; }
-  .sig .meta .tag { color: var(--black); background: var(--orange); padding: 0 5px; }
-  .sig .meta .unv { color: var(--white); border: 1px dashed var(--white); padding: 0 5px; }
-  .sig h3 { margin: 2px 0 2px; font-size: 1.12em; font-weight: normal; line-height: 1.05; }
-  .sig h3 a { text-decoration: none; }
-  .sig h3 a:hover { text-decoration: underline; }
-  .sig p { margin: 0; opacity: .92; }
-  .sig .src { font-size: .9em; margin-top: 4px; }
-  .sig .src a { color: var(--orange); }
-  .sig.hot h3 { color: var(--white); text-shadow: 2px 2px 0 var(--black); }
-  .empty { padding: 30px 12px; text-align: center; opacity: .8; }
 
-  /* ── threads ────────────────────────────────── */
-  .thread { padding: 10px 0; border-bottom: 2px dotted rgba(255,255,255,.35); }
-  .thread:last-child { border-bottom: 0; }
-  .thread .row { display: flex; gap: 8px; align-items: baseline; }
-  .led { width: 12px; height: 12px; display: inline-block; border: 2px solid var(--white); flex: none; transform: translateY(1px); }
-  .led.heating { background: var(--orange); border-color: var(--orange); animation: blink 1s steps(2) infinite; }
-  .led.watching { background: var(--white); }
-  .led.cooling { background: transparent; }
-  @keyframes blink { 50% { opacity: .2; } }
-  .thread h4 { margin: 0; font-weight: normal; font-size: 1.05em; }
-  .thread .q { margin: 2px 0 0 20px; opacity: .85; font-size: .92em; }
-  .thread .cd { margin: 4px 0 0 20px; color: var(--black); background: var(--orange); display: inline-block; padding: 0 6px; }
-  .thread .n { color: var(--orange); margin-left: auto; }
+  .cards { list-style: none; margin: 0; padding: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); grid-auto-flow: dense; gap: 16px; }
+  .card { display: flex; flex-direction: column; min-width: 0; background: #100a28; border: 2px solid; border-color: #6a5ab0 #1a1040 #1a1040 #6a5ab0; outline: 2px solid #000; }
+  .card.featured { grid-column: span 2; }
+  @media (max-width: 640px) { .card.featured { grid-column: auto; } }
+  .card canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; image-rendering: pixelated; border-bottom: 2px solid #000; background: #000; }
+  .cb { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 3px; flex: 1; }
+  .meta { display: flex; flex-wrap: wrap; gap: 0 10px; font-size: .85em; color: var(--dim); }
+  .tag { color: #000; padding: 0 5px; }
+  .unv { border: 1px dashed var(--dim); padding: 0 4px; }
+  .card h3 { margin: 2px 0; font-weight: normal; font-size: 1.12em; line-height: 1.02; }
+  .card.featured h3 { font-size: 1.45em; }
+  .card h3 a { color: var(--text); text-decoration: none; }
+  .card h3 a:hover { color: var(--gold); }
+  .card p { margin: 0; color: #d4cbf2; }
+  .cf { margin-top: auto; padding-top: 6px; display: flex; align-items: center; gap: 10px; font-size: .88em; }
+  .cf a { color: var(--orange); }
+  .gems { display: flex; gap: 6px; margin-left: auto; padding-right: 3px; }
+  .gems i { width: 9px; height: 9px; transform: rotate(45deg); background: #24184a; outline: 1px solid #000; }
+  .gems i.on { background: linear-gradient(135deg, #fff 0 22%, #ffb04a 30%, #c2401a 100%); }
+  .empty { grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--dim); }
 
-  /* ── paula meters (signals per beat) ───────── */
-  .meters { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; align-items: end; height: 130px; padding-top: 6px; }
-  .meter { display: flex; flex-direction: column-reverse; gap: 2px; height: 100%; }
-  .meter i { height: 8px; background: var(--white); opacity: .15; }
-  .meter i.on { opacity: 1; }
-  .meter i.on.hi { background: var(--orange); }
-  .meterlabels { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; font-size: .62em; text-align: center; margin-top: 4px; letter-spacing: -.02em; }
+  .quest { padding: 10px 0; border-bottom: 2px dotted #3a2a7a; }
+  .quest:last-child { border-bottom: 0; }
+  .qrow { display: flex; gap: 9px; align-items: baseline; }
+  .qrow h4 { margin: 0; font-weight: normal; font-size: 1.06em; }
+  .qrow .n { margin-left: auto; color: var(--orange); }
+  .gem { width: 11px; height: 11px; flex: none; transform: translateY(1px) rotate(45deg); outline: 1px solid #000; }
+  .gem.heating { background: #ff5a3a; box-shadow: 0 0 8px #ff5a3a; animation: pulse 1s steps(2) infinite; }
+  .gem.watching { background: var(--cyan); }
+  .gem.cooling { background: #3a2a6a; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .q { margin: 2px 0 0 20px; color: var(--dim); font-size: .92em; }
+  .cd { display: inline-block; margin: 5px 0 0 20px; padding: 0 6px; color: #120400; background: linear-gradient(#ffd36a, #ff8a3a); outline: 1px solid #000; }
 
-  /* ── about / footer ─────────────────────────── */
+  .spec { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; align-items: end; height: 120px; }
+  .spec div { height: 100%; display: flex; flex-direction: column-reverse; gap: 2px; }
+  .spec i { height: 7px; opacity: .13; }
+  .spec i.on { opacity: 1; }
+  .specl { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; font-size: .6em; text-align: center; color: var(--dim); margin-top: 4px; }
+
   .about p { margin: 0 0 8px; }
-  .about code { color: var(--orange); }
-  footer { text-align: center; padding: 0 16px 24px; opacity: .8; font-size: .9em; }
+  footer { text-align: center; color: var(--dim); padding: 0 16px 30px; font-size: .9em; }
 
-  /* ── guru meditation (shown if feed fails) ─── */
-  .guru { display: none; margin: 30px auto; max-width: 720px; background: var(--black); color: #ff2a2a; border: 6px solid #ff2a2a; padding: 16px; text-align: center; animation: guru 1s steps(2) infinite; }
-  @keyframes guru { 50% { border-color: var(--black); } }
+  .guru { display: none; margin: 30px auto; max-width: 720px; background: #000; color: #ff2a2a; border: 6px solid #ff2a2a; padding: 16px; text-align: center; animation: guru 1s steps(2) infinite; }
+  @keyframes guru { 50% { border-color: #000; } }
   body.broken .guru { display: block; }
-  body.broken .desk { display: none; }
+  body.broken .wrap { display: none; }
 
-  @media (prefers-reduced-motion: reduce) {
-    .led.heating, .guru { animation: none; }
-  }
+  @media (prefers-reduced-motion: reduce) { .gem.heating, .guru { animation: none; } }
 </style>
 </head>
 <body>
 
-<div class="screenbar" role="banner">
-  <b>Amigabot</b>
-  <span id="sb-count">— signals</span>
-  <span class="hide-sm" id="sb-sweep">last sweep —</span>
+<div class="bar" role="banner">
+  <b>AMIGABOT</b>
+  <span id="sb-count" class="hide-sm dim">— signals</span>
+  <span class="hide-sm dim" id="sb-sweep">last sweep —</span>
   <span class="grow"></span>
-  <span class="hide-sm" id="sb-mem">— chip mem free</span>
-  <span class="depth" aria-hidden="true"><i></i><i></i></span>
+  <span class="hide-sm dim" id="sb-mem"></span>
+  <button class="sound" id="sound" aria-pressed="false" title="Play the Amigabot tune">&#9835; Paula</button>
 </div>
 
-<div class="copper" aria-hidden="true"><canvas id="copper"></canvas></div>
+<h1 class="sr">Amigabot — signals from the retro Amiga scene</h1>
+<div class="stage">
+  <div class="crt" id="crt" title="Click for sound">
+    <canvas id="hero" width="384" height="216" aria-hidden="true"></canvas>
+  </div>
+</div>
 
 <div class="guru" role="alert">
   Software Failure. &nbsp; Press left mouse button to continue.<br>
   Guru Meditation #00000004.0000FEED &nbsp;—&nbsp; couldn't read data/. Serve the repo root, or run <code>node scripts/build.mjs</code>.
 </div>
 
-<main class="desk">
-  <nav class="drawers" id="drawers" aria-label="Beats"></nav>
+<div class="wrap">
+  <nav class="beats" id="beats" aria-label="Beats"></nav>
 
-  <section class="win" aria-labelledby="w-signals">
-    <div class="titlebar"><span class="close"></span><h2 id="w-signals">Signals</h2><span class="grow"></span><span class="gad"></span></div>
-    <div class="filterline">
-      <button class="chk" id="f-hot" aria-pressed="false">heat 4+</button>
-      <button class="chk" id="f-unv" aria-pressed="false">hide unverified</button>
-      <span class="grow"></span>
-      <span id="f-shown"></span>
-    </div>
-    <ol class="signals" id="signals"></ol>
-  </section>
-
-  <aside class="side">
-    <section class="win" aria-labelledby="w-threads">
-      <div class="titlebar"><span class="close"></span><h2 id="w-threads">Threads</h2><span class="grow"></span><span class="gad"></span></div>
-      <div class="body" id="threads"></div>
-    </section>
-
-    <section class="win" aria-labelledby="w-paula">
-      <div class="titlebar"><span class="close"></span><h2 id="w-paula">Paula · signals per beat</h2><span class="grow"></span><span class="gad"></span></div>
-      <div class="body"><div class="meters" id="meters"></div><div class="meterlabels" id="meterlabels"></div></div>
-    </section>
-
-    <section class="win about" aria-labelledby="w-about">
-      <div class="titlebar"><span class="close"></span><h2 id="w-about">About</h2><span class="grow"></span><span class="gad"></span></div>
-      <div class="body">
-        <p>An agent sweeps the Amiga scene's news sites, forums and party archives, files what it finds by beat and heat, and keeps following the stories that matter.</p>
-        <p>Every signal links to its source. Items marked <span style="border:1px dashed #fff;padding:0 4px">unverified</span> were tipped in by hand and haven't been checked by a sweep yet.</p>
-        <p>A <a href="https://decibel.systems">Decibel</a> watcher. Source: <a id="repo" href="https://github.com/mediareason/amigabot">mediareason/amigabot</a></p>
+  <div class="layout">
+    <section class="panel" aria-labelledby="h-signals">
+      <div class="ph"><h2 class="chrome" id="h-signals">Signals</h2><span class="grow"></span><span id="f-shown" class="dim"></span></div>
+      <div class="filters">
+        <button class="chk" id="f-hot" aria-pressed="false">heat 4+</button>
+        <button class="chk" id="f-unv" aria-pressed="false">hide unverified</button>
       </div>
+      <ol class="cards" id="cards"></ol>
     </section>
-  </aside>
-</main>
+
+    <aside>
+      <section class="panel" aria-labelledby="h-quests">
+        <div class="ph"><h2 class="chrome" id="h-quests">Quest log</h2></div>
+        <div class="pb" id="quests"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-spec">
+        <div class="ph"><h2 class="chrome" id="h-spec">Spectrum</h2><span class="grow"></span><span class="dim" style="font-size:.8em">signals per beat</span></div>
+        <div class="pb"><div class="spec" id="spec"></div><div class="specl" id="specl"></div></div>
+      </section>
+
+      <section class="panel about" aria-labelledby="h-about">
+        <div class="ph"><h2 class="chrome" id="h-about">About</h2></div>
+        <div class="pb">
+          <p>An agent sweeps the Amiga scene's news sites, forums and party archives, files what it finds by beat and heat, and keeps following the stories that matter.</p>
+          <p>Every signal links to its source. Items marked <span class="unv">unverified</span> were tipped in by hand and haven't been checked by a sweep yet.</p>
+          <p>Everything on this page — the world, the demo effects, the cover art and the tune — is generated in code. A <a href="https://decibel.systems">Decibel</a> watcher. Source: <a id="repo" href="https://github.com/mediareason/amigabot">mediareason/amigabot</a></p>
+        </div>
+      </section>
+    </aside>
+  </div>
+</div>
 
 <footer id="foot"></footer>
 
 <script src="feed.js"></script>
 <script>
-// Data: window.WATCH_FEED when built locally (node scripts/build.mjs → feed.js,
-// works from file://). On GitHub Pages there is no feed.js; read data/ directly.
+'use strict';
+
+/* ════════════════════════════════════════════════════════════════
+   Shared helpers: palettes, ordered dithering, seeded RNG, 5x7 font
+   ════════════════════════════════════════════════════════════════ */
+const hex = (h) => Array.isArray(h) ? h : [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const mix = (a, b, t) => { const A = hex(a), B = hex(b); return A.map((v, i) => Math.round(v + (B[i] - v) * t)); };
+const css = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
+function ramp(stops, n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const p = n === 1 ? 0 : i / (n - 1); let k = 0;
+    while (k < stops.length - 2 && p > stops[k + 1][0]) k++;
+    const [p0, c0] = stops[k], [p1, c1] = stops[k + 1];
+    out.push(mix(c0, c1, Math.min(1, Math.max(0, (p - p0) / ((p1 - p0) || 1)))));
+  }
+  return out;
+}
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+const bay = (x, y) => (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16;
+const pick = (pal, v, x, y) => { const p = Math.max(0, Math.min(1, v)) * (pal.length - 1), b = Math.floor(p); return pal[(p - b) > bay(x, y) ? Math.min(b + 1, pal.length - 1) : b]; };
+function ditherFill(img, x0, y0, w, h, pal, f) {
+  const d = img.data, W = img.width;
+  for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) {
+    const c = pick(pal, f(x, y), x, y), i = (y * W + x) * 4;
+    d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+  }
+}
+function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function ridge(P, r, amp, base, spikes) {
+  const h = new Float32Array(P), waves = [];
+  for (let i = 0; i < 5; i++) waves.push({ k: 1 + Math.floor(r() * (3 + i * 4)), a: amp / (i + 1.3), p: r() * 6.283 });
+  for (let x = 0; x < P; x++) { let v = base; for (const w of waves) v += w.a * Math.sin((x / P) * 6.283 * w.k + w.p); h[x] = v; }
+  for (let s = 0; s < (spikes || 0); s++) {
+    const cx = Math.floor(r() * P), hw = 2 + Math.floor(r() * 4), ht = amp * (0.8 + r() * 1.6);
+    for (let dx = -hw * 3; dx <= hw * 3; dx++) { const x = (cx + dx + P) % P; h[x] += ht * Math.pow(Math.max(0, 1 - Math.abs(dx) / (hw * 3)), 2.2); }
+  }
+  return h;
+}
+const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+
+const FONT = (() => {
+  const g = {
+    A:'01110 10001 10001 11111 10001 10001 10001', B:'11110 10001 10001 11110 10001 10001 11110', C:'01110 10001 10000 10000 10000 10001 01110',
+    D:'11110 10001 10001 10001 10001 10001 11110', E:'11111 10000 10000 11110 10000 10000 11111', F:'11111 10000 10000 11110 10000 10000 10000',
+    G:'01110 10001 10000 10111 10001 10001 01111', H:'10001 10001 10001 11111 10001 10001 10001', I:'01110 00100 00100 00100 00100 00100 01110',
+    J:'00111 00010 00010 00010 00010 10010 01100', K:'10001 10010 10100 11000 10100 10010 10001', L:'10000 10000 10000 10000 10000 10000 11111',
+    M:'10001 11011 10101 10101 10001 10001 10001', N:'10001 10001 11001 10101 10011 10001 10001', O:'01110 10001 10001 10001 10001 10001 01110',
+    P:'11110 10001 10001 11110 10000 10000 10000', Q:'01110 10001 10001 10001 10101 10010 01101', R:'11110 10001 10001 11110 10100 10010 10001',
+    S:'01111 10000 10000 01110 00001 00001 11110', T:'11111 00100 00100 00100 00100 00100 00100', U:'10001 10001 10001 10001 10001 10001 01110',
+    V:'10001 10001 10001 10001 10001 01010 00100', W:'10001 10001 10001 10101 10101 10101 01010', X:'10001 10001 01010 00100 01010 10001 10001',
+    Y:'10001 10001 01010 00100 00100 00100 00100', Z:'11111 00001 00010 00100 01000 10000 11111',
+    0:'01110 10001 10011 10101 11001 10001 01110', 1:'00100 01100 00100 00100 00100 00100 01110', 2:'01110 10001 00001 00010 00100 01000 11111',
+    3:'11111 00010 00100 00010 00001 10001 01110', 4:'00010 00110 01010 10010 11111 00010 00010', 5:'11111 10000 11110 00001 00001 10001 01110',
+    6:'00110 01000 10000 11110 10001 10001 01110', 7:'11111 00001 00010 00100 01000 01000 01000', 8:'01110 10001 10001 01110 10001 10001 01110',
+    9:'01110 10001 10001 01111 00001 00010 01100', ' ':'00000 00000 00000 00000 00000 00000 00000',
+    '.':'00000 00000 00000 00000 00000 01100 01100', ',':'00000 00000 00000 00000 01100 00100 01000', '!':'00100 00100 00100 00100 00100 00000 00100',
+    '?':'01110 10001 00001 00010 00100 00000 00100', '-':'00000 00000 00000 11111 00000 00000 00000', ':':'00000 01100 01100 00000 01100 01100 00000',
+    '*':'00000 00100 10101 01110 10101 00100 00000', '/':'00001 00010 00010 00100 01000 01000 10000', "'":'00100 00100 01000 00000 00000 00000 00000',
+    '&':'01100 10010 10100 01000 10101 10010 01101', '(':'00010 00100 01000 01000 01000 00100 00010', ')':'01000 00100 00010 00010 00010 00100 01000',
+    '%':'11000 11001 00010 00100 01000 10011 00011', '+':'00000 00100 00100 11111 00100 00100 00000', '#':'01010 01010 11111 01010 11111 01010 01010'
+  };
+  const out = {}; for (const k in g) out[k] = g[k].split(' '); return out;
+})();
+const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[–—]/g, '-').replace(/[‘’]/g, "'").toUpperCase().split('').map(c => FONT[c] ? c : ' ').join('');
+function textMask(s) {
+  s = norm(s); const w = Math.max(1, s.length * 6 - 1), m = new Uint8Array(w * 7);
+  [...s].forEach((ch, i) => { const rows = FONT[ch]; for (let y = 0; y < 7; y++) for (let x = 0; x < 5; x++) if (rows[y][x] === '1') m[y * w + i * 6 + x] = 1; });
+  return { w, h: 7, get: (x, y) => x >= 0 && y >= 0 && x < w && y < 7 && m[y * w + x] === 1 };
+}
+// render bitmap text into a canvas; colour may be a palette indexed by row
+function textCanvas(s, colour, scale, shadow) {
+  const m = textMask(s), c = mk(m.w * scale + 2, m.h * scale + 2), g = c.getContext('2d');
+  const rows = Array.isArray(colour[0]) ? colour : null;
+  for (let y = 0; y < m.h * scale; y++) for (let x = 0; x < m.w * scale; x++) {
+    if (!m.get((x / scale) | 0, (y / scale) | 0)) continue;
+    if (shadow) { g.fillStyle = shadow; g.fillRect(x + 1, y + 1, 1, 1); }
+  }
+  for (let y = 0; y < m.h * scale; y++) {
+    g.fillStyle = css(rows ? rows[Math.min(rows.length - 1, y)] : hex(colour));
+    for (let x = 0; x < m.w * scale; x++) if (m.get((x / scale) | 0, (y / scale) | 0)) g.fillRect(x, y, 1, 1);
+  }
+  return c;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Paula: an original 4-channel tune, synthesised with WebAudio.
+   Off until the viewer asks for it.
+   ════════════════════════════════════════════════════════════════ */
+const Paula = (() => {
+  let ac = null, out = null, noise = null, on = false, timer = 0, step = 0, nextT = 0, loops = 0;
+  const lv = [0, 0, 0, 0], S = 60 / 125 / 4, f = (n) => 440 * Math.pow(2, (n - 69) / 12);
+  const CH = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];           // Am  F  C  G
+  const LEAD = [
+    [76, 0, 0, 72, 0, 0, 69, 0, 72, 0, 74, 0, 76, 0, 0, 0],
+    [77, 0, 0, 76, 0, 0, 72, 0, 69, 0, 0, 0, 72, 0, 0, 0],
+    [72, 0, 76, 0, 79, 0, 0, 76, 0, 0, 74, 0, 72, 0, 0, 0],
+    [74, 0, 0, 71, 0, 0, 67, 0, 71, 0, 74, 0, 79, 0, 78, 0]
+  ];
+  function init() {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    out = ac.createGain(); out.gain.value = 0.45;
+    const comp = ac.createDynamicsCompressor(); out.connect(comp); comp.connect(ac.destination);
+    noise = ac.createBuffer(1, ac.sampleRate / 2, ac.sampleRate);
+    const nd = noise.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  }
+  function tone(type, freq, t, dur, vol, cut) {
+    const o = ac.createOscillator(), g = ac.createGain(), fl = ac.createBiquadFilter();
+    o.type = type; o.frequency.value = freq; fl.type = 'lowpass'; fl.frequency.value = cut;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    o.connect(fl); fl.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.02);
+  }
+  function hit(t, dur, vol, type, fq) {
+    const s = ac.createBufferSource(), g = ac.createGain(), fl = ac.createBiquadFilter();
+    s.buffer = noise; fl.type = type; fl.frequency.value = fq;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    s.connect(fl); fl.connect(g); g.connect(out); s.start(t); s.stop(t + dur + 0.02);
+  }
+  function kick(t) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+    g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.25);
+  }
+  const bump = (ch, t) => setTimeout(() => { lv[ch] = 1; }, Math.max(0, (t - ac.currentTime) * 1000));
+  function schedule(s, t) {
+    const bar = (s >> 4) & 3, st = s & 15, ch = CH[bar];
+    if (st % 2 === 0) { tone('sawtooth', f(ch[0] - 12 + (st % 4 === 2 ? 12 : 0)), t, 0.2, 0.22, 700); bump(0, t); }
+    tone('square', f(ch[st % 3] + 12), t, 0.09, 0.045, 3200); if (st % 4 === 0) bump(1, t);
+    const n = LEAD[bar][st]; if (n && loops > 0 && loops % 4 !== 3) { tone('square', f(n), t, 0.32, 0.07, 2400); bump(2, t); }
+    if (st === 0 || st === 8 || st === 10) { kick(t); bump(3, t); }
+    if (st === 4 || st === 12) { hit(t, 0.16, 0.35, 'bandpass', 1800); bump(3, t); }
+    if (st % 2 === 1) hit(t, 0.04, 0.12, 'highpass', 7000);
+  }
+  function tick() { while (nextT < ac.currentTime + 0.12) { schedule(step, nextT); nextT += S; step = (step + 1) % 64; if (step === 0) loops++; } }
+  return {
+    lv,
+    get on() { return on; },
+    toggle() {
+      if (!ac) init();
+      if (on) { on = false; clearInterval(timer); ac.suspend(); }
+      else { on = true; ac.resume(); nextT = ac.currentTime + 0.06; timer = setInterval(tick, 25); }
+      return on;
+    },
+    decay() { for (let i = 0; i < 4; i++) lv[i] *= 0.88; }
+  };
+})();
+
+/* ════════════════════════════════════════════════════════════════
+   Data
+   ════════════════════════════════════════════════════════════════ */
+// window.WATCH_FEED when built locally (node scripts/build.mjs → feed.js, works from file://).
+// On GitHub Pages there is no feed.js; read data/ directly.
 async function loadFeed() {
   if (window.WATCH_FEED) return window.WATCH_FEED;
   const get = (p) => fetch(p, { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error(p); return r.text(); });
   const [site, threads, items] = await Promise.all([get('data/site.json'), get('data/threads.json'), get('data/items.jsonl')]);
-  const list = items.split('\n').filter(l => l.trim()).map(l => JSON.parse(l))
-    .sort((a, b) => b.date.localeCompare(a.date) || b.heat - a.heat);
+  const list = items.split('\n').filter(l => l.trim()).map(l => JSON.parse(l)).sort((a, b) => b.date.localeCompare(a.date) || b.heat - a.heat);
   const counts = {}; list.forEach(i => { counts[i.beat] = (counts[i.beat] || 0) + 1; });
   const s = JSON.parse(site);
   return { site: s, threads: JSON.parse(threads), items: list, counts, built_at: s.last_sweep };
 }
+
+const BEATS = [
+  ['hardware', 'Hardware', 'chip'], ['games', 'Games', 'joy'], ['scene', 'Scene', 'disk'], ['software', 'Software', 'wb'],
+  ['emulation', 'Emulation', 'screen'], ['events', 'Events', 'flag'], ['press', 'Press', 'mag'], ['biz', 'Business', 'key']
+];
+const LABEL = Object.fromEntries(BEATS.map(b => [b[0], b[1]]));
+// per-beat cover-art palettes: deep sky → mid → horizon → light
+const ART = {
+  hardware: ['#021a2a', '#0a5a7a', '#5ad0e0', '#d8fff8'], games: ['#12052a', '#5a1a6a', '#e0566a', '#ffc070'],
+  scene: ['#000008', '#1a0a3a', '#7a1a8a', '#ff6ad0'], software: ['#06103a', '#1a4a9a', '#6aa0ff', '#e8f0ff'],
+  emulation: ['#020a06', '#0a3a2a', '#2aa070', '#b0ffd0'], events: ['#1a0204', '#6a0a1a', '#e04a2a', '#ffd060'],
+  press: ['#120a04', '#4a2a12', '#b07a3a', '#f8e0b0'], biz: ['#040818', '#18284a', '#8a7a4a', '#f0d890']
+};
+
 loadFeed().then(boot, () => { document.body.classList.add('broken'); document.querySelector('.guru').onclick = () => location.reload(); });
 
 function boot(F) {
+  ui(F);
+  demo(F);
+}
 
-  const BEATS = [
-    ['hardware', 'Hardware', 'chip'], ['games', 'Games', 'joy'], ['scene', 'Scene', 'disk'],
-    ['software', 'Software', 'wb'], ['emulation', 'Emulation', 'screen'], ['events', 'Events', 'flag'],
-    ['press', 'Press', 'mag'], ['biz', 'Business', 'key']
-  ];
-  const LABEL = Object.fromEntries(BEATS.map(b => [b[0], b[1]]));
-
-  // 12x12 pixel icons, original. . = empty, # = white, o = orange, k = black
+/* ════════════════════════════════════════════════════════════════
+   The feed UI
+   ════════════════════════════════════════════════════════════════ */
+function ui(F) {
   const PIX = {
     chip:   ['............','..#.#.#.#...','.#########..','.#kkkkkkk#..','##kooooook##','.#kooooook#.','##kooooook##','.#kooooook#.','.#kkkkkkk#..','.#########..','..#.#.#.#...','............'],
     joy:    ['............','....oo......','...oooo.....','...oooo.....','....oo......','.....#......','.....#......','..########..','.##kkkkkk##.','.#kk#kkkkk#.','.##########.','............'],
@@ -253,116 +404,395 @@ function boot(F) {
     mag:    ['............','.#########..','.#kkkkkkk##.','.#koooook#k#','.#kkkkkkk#k#','.#k#####k#k#','.#k#####k#k#','.#k###k#k#k#','.#kkkkkkk#k#','.#########k#','..kkkkkkkkk#','............'],
     key:    ['............','..####......','.#oooo#.....','#oo..oo#....','#oo..oo#....','.#oooo######','..####oooooo','......o#o#o.','......o.o.o.','............','............','............']
   };
-  const COL = { '#': '#ffffff', o: '#ff8800', k: '#000022', a: '#ff8800' };
+  const COL = { '#': '#ffffff', o: '#ff9a3a', k: '#000022', a: '#ff9a3a' };
   const icon = (name) => {
-    const rows = PIX[name] || PIX.disk; let r = '';
-    rows.forEach((row, y) => [...row].forEach((c, x) => { if (COL[c]) r += `<rect x="${x}" y="${y}" width="1" height="1" fill="${COL[c]}"/>`; }));
+    let r = ''; (PIX[name] || PIX.disk).forEach((row, y) => [...row].forEach((c, x) => { if (COL[c]) r += `<rect x="${x}" y="${y}" width="1" height="1" fill="${COL[c]}"/>`; }));
     return `<svg viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true">${r}</svg>`;
   };
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const fmt = (d, approx) => {
-    const t = new Date(d + 'T12:00:00');
-    return approx ? t.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const fmt = (d, approx) => { const t = new Date(d + 'T12:00:00'); return approx ? t.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); };
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('amigabot:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('amigabot:' + k, JSON.stringify(v)); } catch {} }
   };
-
-  // ── state (remembered per viewer; storage may be unavailable) ──
-  const store = { get(k, d) { try { const v = localStorage.getItem('amigabot:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-                  set(k, v) { try { localStorage.setItem('amigabot:' + k, JSON.stringify(v)); } catch {} } };
   const S = { beat: store.get('beat', null), hot: store.get('hot', false), unv: store.get('unv', false) };
+  const $ = (id) => document.getElementById(id);
 
-  // ── screen bar ──
+  // bar
   const sw = new Date(F.site.last_sweep);
-  document.getElementById('sb-count').textContent = `${F.items.length} signals`;
-  document.getElementById('sb-sweep').textContent = `last sweep ${sw.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${sw.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
-  document.getElementById('sb-mem').textContent = `${(524288 - F.items.length * 512).toLocaleString('en-US')} chip mem free`;
-  if (F.site.repo) document.getElementById('repo').href = F.site.repo;
+  $('sb-count').textContent = `${F.items.length} signals`;
+  $('sb-sweep').textContent = `last sweep ${sw.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${sw.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+  $('sb-mem').textContent = `${(2097152 - F.items.length * 4096).toLocaleString('en-US')} chip free`;
+  if (F.site.repo) $('repo').href = F.site.repo;
+  const sound = $('sound');
+  const toggleSound = () => sound.setAttribute('aria-pressed', String(Paula.toggle()));
+  sound.addEventListener('click', toggleSound);
+  $('crt').addEventListener('click', toggleSound);
 
-  // ── drawers ──
-  const drawers = document.getElementById('drawers');
-  drawers.innerHTML = [['all', 'All', 'disk']].concat(BEATS).map(([id, label, ic]) => {
-    const n = id === 'all' ? F.items.length : (F.counts[id] || 0);
-    return `<button class="icon" data-beat="${id}" aria-pressed="false">${icon(ic)}<span>${label} <span class="n">${n}</span></span></button>`;
-  }).join('');
-  drawers.addEventListener('click', (e) => {
-    const b = e.target.closest('.icon'); if (!b) return;
-    S.beat = b.dataset.beat === 'all' ? null : b.dataset.beat; store.set('beat', S.beat); render();
-  });
-  const tgl = (id, key) => document.getElementById(id).addEventListener('click', () => { S[key] = !S[key]; store.set(key, S[key]); render(); });
+  // beats
+  const beats = $('beats');
+  beats.innerHTML = [['all', 'All', 'disk']].concat(BEATS).map(([id, label, ic]) =>
+    `<button class="beat" data-beat="${id}" aria-pressed="false">${icon(ic)}<span>${label} <span class="n">${id === 'all' ? F.items.length : (F.counts[id] || 0)}</span></span></button>`).join('');
+  beats.addEventListener('click', (e) => { const b = e.target.closest('.beat'); if (!b) return; S.beat = b.dataset.beat === 'all' ? null : b.dataset.beat; store.set('beat', S.beat); render(); });
+  const tgl = (id, key) => $(id).addEventListener('click', () => { S[key] = !S[key]; store.set(key, S[key]); render(); });
   tgl('f-hot', 'hot'); tgl('f-unv', 'unv');
 
-  // ── signals ──
   function render() {
-    drawers.querySelectorAll('.icon').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.beat === 'all' && !S.beat) || b.dataset.beat === S.beat)));
-    document.getElementById('f-hot').setAttribute('aria-pressed', String(S.hot));
-    document.getElementById('f-unv').setAttribute('aria-pressed', String(S.unv));
+    beats.querySelectorAll('.beat').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.beat === 'all' && !S.beat) || b.dataset.beat === S.beat)));
+    $('f-hot').setAttribute('aria-pressed', String(S.hot)); $('f-unv').setAttribute('aria-pressed', String(S.unv));
     const list = F.items.filter(i => (!S.beat || i.beat === S.beat) && (!S.hot || i.heat >= 4) && (!S.unv || i.verified !== false));
-    document.getElementById('f-shown').textContent = `${list.length} of ${F.items.length}`;
-    document.getElementById('signals').innerHTML = list.length ? list.map(i => `
-      <li class="sig${i.heat >= 5 ? ' hot' : ''}">
-        <div class="heat" title="heat ${i.heat} of 5">${[1, 2, 3, 4, 5].map(n => `<i class="${n <= i.heat ? 'on' : ''}"></i>`).join('')}</div>
-        <div>
-          <div class="meta"><span>${esc(fmt(i.date, i.date_approx))}</span><span class="tag">${esc(LABEL[i.beat] || i.beat)}</span>${i.thread ? `<span>&#9654; ${esc((F.threads.find(t => t.id === i.thread) || {}).title || i.thread)}</span>` : ''}${i.verified === false ? '<span class="unv">unverified</span>' : ''}</div>
+    $('f-shown').textContent = `${list.length} of ${F.items.length}`;
+    $('cards').innerHTML = list.length ? list.map(i => {
+      const thread = i.thread ? (F.threads.find(t => t.id === i.thread) || {}).title || i.thread : '';
+      const tagBg = ART[i.beat] ? ART[i.beat][2] : '#ff9a3a';
+      return `<li class="card${i.heat >= 5 ? ' featured' : ''}">
+        <canvas width="160" height="90" data-id="${esc(i.id)}" aria-hidden="true"></canvas>
+        <div class="cb">
+          <div class="meta"><span>${esc(fmt(i.date, i.date_approx))}</span><span class="tag" style="background:${tagBg}">${esc(LABEL[i.beat] || i.beat)}</span>${thread ? `<span>&#9654; ${esc(thread)}</span>` : ''}${i.verified === false ? '<span class="unv">unverified</span>' : ''}</div>
           <h3><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a></h3>
           <p>${esc(i.summary)}</p>
-          <div class="src">via <a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.source)}</a>${(i.links || []).map((l, k) => ` · <a href="${esc(l)}" target="_blank" rel="noopener">more ${k + 1}</a>`).join('')}</div>
-        </div>
-      </li>`).join('') : '<li class="empty">No signals in this drawer. Insert disk.</li>';
+          <div class="cf"><span>via <a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.source)}</a>${(i.links || []).map((l, k) => ` · <a href="${esc(l)}" target="_blank" rel="noopener">more ${k + 1}</a>`).join('')}</span>
+            <span class="gems" title="heat ${i.heat} of 5">${[1, 2, 3, 4, 5].map(n => `<i class="${n <= i.heat ? 'on' : ''}"></i>`).join('')}</span></div>
+        </div></li>`;
+    }).join('') : '<li class="empty">No signals in this drawer. Insert disk 2.</li>';
+    $('cards').querySelectorAll('canvas').forEach(c => coverArt(c, F.items.find(i => i.id === c.dataset.id)));
   }
 
-  // ── threads ──
+  // quest log
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  document.getElementById('threads').innerHTML = F.threads.map(t => {
+  $('quests').innerHTML = F.threads.map(t => {
     const n = F.items.filter(i => i.thread === t.id).length;
     let cd = '';
-    if (t.next) {
-      const days = Math.round((new Date(t.next + 'T00:00:00') - today) / 864e5);
-      cd = `<div class="cd">${esc(t.next_label || 'Next')}: ${days > 0 ? `T-${days} days` : days === 0 ? 'TODAY' : `${-days}d ago`}</div>`;
-    }
-    return `<div class="thread"><div class="row"><span class="led ${esc(t.status)}" title="${esc(t.status)}"></span><h4>${esc(t.title)}</h4><span class="n">${n}</span></div><p class="q">${esc(t.question)}</p>${cd}</div>`;
+    if (t.next) { const days = Math.round((new Date(t.next + 'T00:00:00') - today) / 864e5); cd = `<div class="cd">${esc(t.next_label || 'Next')}: ${days > 0 ? `T-${days} days` : days === 0 ? 'TODAY' : `${-days}d ago`}</div>`; }
+    return `<div class="quest"><div class="qrow"><span class="gem ${esc(t.status)}" title="${esc(t.status)}"></span><h4>${esc(t.title)}</h4><span class="n">${n}</span></div><p class="q">${esc(t.question)}</p>${cd}</div>`;
   }).join('');
 
-  // ── paula meters ──
+  // spectrum
   const max = Math.max(1, ...BEATS.map(b => F.counts[b[0]] || 0)), SEG = 12;
-  document.getElementById('meters').innerHTML = BEATS.map(([id]) => {
-    const lit = Math.round(((F.counts[id] || 0) / max) * SEG);
-    return `<div class="meter" title="${LABEL[id]}: ${F.counts[id] || 0}">${Array.from({ length: SEG }, (_, k) => `<i class="${k < lit ? 'on' : ''}${k >= SEG - 3 ? ' hi' : ''}"></i>`).join('')}</div>`;
+  $('spec').innerHTML = BEATS.map(([id]) => {
+    const lit = Math.round(((F.counts[id] || 0) / max) * SEG), pal = ramp([[0, ART[id][1]], [1, ART[id][3]]], SEG);
+    return `<div title="${LABEL[id]}: ${F.counts[id] || 0}">${pal.map((c, k) => `<i class="${k < lit ? 'on' : ''}" style="background:${css(c)}"></i>`).join('')}</div>`;
   }).join('');
-  document.getElementById('meterlabels').innerHTML = BEATS.map(b => `<span>${b[1].slice(0, 4)}</span>`).join('');
+  $('specl').innerHTML = BEATS.map(b => `<span>${b[1].slice(0, 4)}</span>`).join('');
 
-  document.getElementById('foot').textContent = `${F.site.sweeps} sweep${F.site.sweeps === 1 ? '' : 's'} so far · updated ${new Date(F.built_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}`;
+  $('foot').textContent = `Amigabot · ${F.site.sweeps} sweep${F.site.sweeps === 1 ? '' : 's'} so far · updated ${new Date(F.built_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}`;
   render();
+}
 
-  // ── copper bars + sine scroller ──
-  const cv = document.getElementById('copper'), cx = cv.getContext('2d');
-  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const hot = F.items.filter(i => i.heat >= 4).map(i => i.title.toUpperCase());
-  const msg = '      *** AMIGABOT ***   GREETINGS TO THE SCENE   ***   ' + hot.join('   ***   ') + '   ***   WRAP!      ';
-  let W, H, x = 0, t = 0;
-  function size() { const r = window.devicePixelRatio || 1; W = cv.clientWidth; H = cv.clientHeight; cv.width = W * r; cv.height = H * r; cx.setTransform(r, 0, 0, r, 0, 0); }
-  size(); addEventListener('resize', size);
-  const bars = ['#ff8800', '#ffffff', '#0055aa', '#ff2a6d', '#22ddaa'];
-  function frame() {
-    cx.fillStyle = '#000022'; cx.fillRect(0, 0, W, H);
-    // copper bars: rasters bobbing on sine paths
-    bars.forEach((c, k) => {
-      const y = H / 2 + Math.sin(t / 40 + k * 0.9) * (H / 2 - 12);
-      const g = cx.createLinearGradient(0, y - 9, 0, y + 9);
-      g.addColorStop(0, '#000022'); g.addColorStop(0.5, c); g.addColorStop(1, '#000022');
-      cx.fillStyle = g; cx.fillRect(0, y - 9, W, 18);
-    });
-    // scroller
-    cx.font = '48px VT323, monospace'; cx.textBaseline = 'middle';
-    const cw = Math.ceil(cx.measureText('M').width) + 2;
-    for (let i = 0; i < msg.length; i++) {
-      const px = i * cw - x; if (px < -cw) continue; if (px > W) break;
-      const py = H / 2 + Math.sin((px + t * 3) / 70) * 22;
-      cx.fillStyle = '#000022'; cx.fillText(msg[i], px + 3, py + 3);
-      cx.fillStyle = '#ffffff'; cx.fillText(msg[i], px, py);
-    }
-    x = (x + 2) % (msg.length * cw); t++;
-    if (!reduce) requestAnimationFrame(frame);
+// Procedural cover art: a little painted world per signal, seeded by its id, coloured by its beat.
+function coverArt(canvas, it) {
+  if (!it) return;
+  const w = 160, h = 90, g = canvas.getContext('2d'), img = g.createImageData(w, h), d = img.data;
+  const r = rng(hashStr(it.id)), p = ART[it.beat] || ART.games;
+  const put = (x, y, c) => { if (x < 0 || y < 0 || x >= w || y >= h) return; const i = (y * w + x) * 4; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255; };
+  const hz = 50 + ((r() * 12) | 0);
+  ditherFill(img, 0, 0, w, hz, ramp([[0, p[0]], [0.62, p[1]], [0.9, p[2]], [1, p[3]]], 18), (x, y) => y / (hz - 1));
+  if (['scene', 'emulation', 'software', 'biz'].includes(it.beat) || r() < 0.3)
+    for (let k = 0; k < 34; k++) put((r() * w) | 0, (r() * hz * 0.6) | 0, r() < 0.5 ? [255, 255, 255] : hex(p[3]));
+  // orb (sun, moon or planet)
+  const ox = 18 + ((r() * 124) | 0), oy = 10 + ((r() * (hz - 28)) | 0), oR = 5 + ((r() * 12) | 0), oPal = ramp([[0, p[3]], [1, p[1]]], 6), ringed = r() < 0.35;
+  for (let y = -oR - 4; y <= oR + 4; y++) for (let x = -oR * 2; x <= oR * 2; x++) {
+    const X = ox + x, Y = oy + y, q = (x * x + y * y) / (oR * oR);
+    const ry = (x * 0.25 + y) / (oR * 0.38), rx = x / (oR * 1.9), e = Math.sqrt(rx * rx + ry * ry);
+    if (ringed && e > 0.7 && e < 1 && (ry > 0 || q > 1)) put(X, Y, pick(oPal, 0.2 + (e - 0.7), X, Y));
+    else if (q <= 1) put(X, Y, pick(oPal, (x + y) / (2.4 * oR) + 0.45, X, Y));
   }
-  (document.fonts ? document.fonts.ready : Promise.resolve()).then(frame);
+  // ground
+  ditherFill(img, 0, hz, w, h - hz, ramp([[0, mix(p[1], '#000000', 0.35)], [1, '#020108']], 10), (x, y) => (y - hz) / (h - hz - 1));
+  // three ridges, far to near
+  for (let L = 0; L < 3; L++) {
+    const hgt = ridge(w, r, 5 + L * 3, 9 + L * 3, L === 0 ? 0 : 2 + L * 2);
+    const pal = ramp([[0, mix(p[1], p[2], 0.5 - L * 0.25)], [1, mix(p[0], '#000000', L * 0.3)]], 8);
+    const base = hz + L * 7;
+    for (let x = 0; x < w; x++) { const hh = Math.max(1, Math.round(hgt[x])); for (let y = base - hh; y < base + 2; y++) put(x, y, y === base - hh && L === 2 ? hex(p[2]) : pick(pal, (y - (base - hh)) / (hh + 2), x, y)); }
+  }
+  // foreground silhouettes
+  for (let k = 0; k < 26; k++) { const x = (r() * w) | 0, hh = 2 + ((r() * 9) | 0); for (let y = 0; y < hh; y++) put(x, h - 1 - y, [4, 2, 12]); }
+  const sp = 1 + ((r() * 3) | 0);
+  for (let k = 0; k < sp; k++) { const x = 8 + ((r() * (w - 16)) | 0), hh = 18 + ((r() * 30) | 0); for (let y = 0; y < hh; y++) { const half = Math.max(0, Math.round(2.5 * (1 - y / hh))); for (let dx = -half; dx <= half; dx++) put(x + dx, h - 1 - y, [4, 2, 12]); } put(x, h - 1 - hh, hex(p[3])); }
+  g.putImageData(img, 0, 0);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   The demo: part 1 a painted parallax world, part 2 plasma + rasters
+   + vector bobs. Chrome logo and sine scroller run on top of both.
+   ════════════════════════════════════════════════════════════════ */
+function demo(F) {
+  const cv = document.getElementById('hero'), ctx = cv.getContext('2d');
+  const W = 384, H = 216, HZ = 118, GE = 194, P = 1024, PART_LEN = 1200; // 24s per part at 50Hz
+  ctx.imageSmoothingEnabled = false;
+  const r = rng(0xA1200);
+
+  /* ── sky: dithered sunset + ringed planet (static) ── */
+  const sky = mk(W, HZ);
+  {
+    const g = sky.getContext('2d'), img = g.createImageData(W, HZ), d = img.data;
+    ditherFill(img, 0, 0, W, HZ, ramp([[0, '#05021a'], [0.32, '#250d4e'], [0.58, '#6e2070'], [0.78, '#d84a6a'], [0.9, '#ff8f4a'], [1, '#ffd98a']], 30), (x, y) => y / (HZ - 1));
+    const cx = 346, cy = 70, R = 20, L = [-0.55, 0.55, 0.62], ca = Math.cos(-0.32), sa = Math.sin(-0.32);
+    const ppal = ramp([[0, '#0c0620'], [0.45, '#36246e'], [0.75, '#6d62c8'], [1, '#d6e0ff']], 14), rpal = ramp([[0, '#4a2a6a'], [1, '#ffc8e8']], 8);
+    for (let y = cy - R - 14; y < cy + R + 14; y++) for (let x = cx - R * 2 - 4; x < cx + R * 2 + 4; x++) {
+      if (x < 0 || y < 0 || x >= W || y >= HZ) continue;
+      const nx = (x - cx) / R, ny = (y - cy) / R, rr = nx * nx + ny * ny, inP = rr < 1;
+      const rx = nx * ca - ny * sa, ry = nx * sa + ny * ca, e = Math.sqrt((rx / 1.95) ** 2 + (ry / 0.42) ** 2);
+      const inRing = e > 0.68 && e < 1 && !(e > 0.8 && e < 0.84), front = ry > 0;
+      let c = null;
+      if (inRing && (front || !inP)) { c = pick(rpal, 1 - (e - 0.68) / 0.32, x, y); if (!front) c = c.map(v => (v * 0.55) | 0); }
+      else if (inP) { const nz = Math.sqrt(1 - rr); const lum = 0.08 + Math.max(0, nx * L[0] + ny * L[1] + nz * L[2]) * 0.92 + Math.sin(ny * 11 + nx * 2.5) * 0.06; c = pick(ppal, lum, x, y); }
+      if (c) { const i = (y * W + x) * 4; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; }
+    }
+    g.putImageData(img, 0, 0);
+  }
+  const stars = Array.from({ length: 90 }, () => ({ x: (r() * W) | 0, y: (r() * HZ * 0.62) | 0, p: r() * 6.28, s: 0.02 + r() * 0.06 }))
+    .filter(s => (s.x - 346) ** 2 + ((s.y - 70) * 2.2) ** 2 > 46 * 46);
+
+  /* ── clouds strip ── */
+  const CL_H = 40, clouds = mk(P, CL_H);
+  {
+    const g = clouds.getContext('2d'), img = g.createImageData(P, CL_H), d = img.data, cpal = ramp([[0, '#6a2272'], [0.6, '#e05a7a'], [1, '#ffb07a']], 8);
+    for (let k = 0; k < 20; k++) {
+      const cx = r() * P, cy = 4 + r() * (CL_H - 10), len = 30 + r() * 90, th = 1.5 + r() * 3.5;
+      for (let y = Math.floor(cy - th); y <= cy + th; y++) for (let x = Math.floor(cx - len); x <= cx + len; x++) {
+        const q = ((x - cx) / len) ** 2 + ((y - cy) / th) ** 2; if (q >= 1 || y < 0 || y >= CL_H) continue;
+        const X = ((x % P) + P) % P; if (q > 0.55 && (q - 0.55) / 0.45 > bay(X, y)) continue;
+        const c = pick(cpal, ((y - (cy - th)) / (2 * th)) * 0.7 + (y / CL_H) * 0.3, X, y), i = (y * P + X) * 4;
+        d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+  }
+
+  /* ── mountain layers ── */
+  function layer(base, amp, spikes, top, bot, rim) {
+    const h = ridge(P, r, amp, base, spikes); let mx = 0; for (const v of h) mx = Math.max(mx, v);
+    const LH = Math.ceil(mx) + 2, c = mk(P, LH), g = c.getContext('2d'), img = g.createImageData(P, LH), d = img.data, pal = ramp([[0, top], [1, bot]], 10), rc = rim ? hex(rim) : null;
+    for (let x = 0; x < P; x++) {
+      const hh = Math.max(1, Math.round(h[x]));
+      for (let y = LH - hh; y < LH; y++) { let col = pick(pal, (y - (LH - hh)) / Math.max(1, LH - 1), x, y); if (rc && y === LH - hh) col = rc; const i = (y * P + x) * 4; d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255; }
+    }
+    g.putImageData(img, 0, 0); return c;
+  }
+  const L0 = layer(17, 9, 0, '#9a4a8e', '#c8607a'), L1 = layer(22, 15, 7, '#5a2470', '#86346e', '#c86a8a'), L3 = layer(14, 11, 12, '#22093a', '#2e0e40', '#ff8a5a');
+
+  /* ── alien spires with lit windows and beacons ── */
+  const SP_H = 76, spires = mk(P, SP_H), beacons = [];
+  {
+    const g = spires.getContext('2d');
+    for (let k = 0; k < 26; k++) {
+      const x0 = 12 + ((r() * (P - 24)) | 0), w = 2 + ((r() * 5) | 0), h = 18 + ((r() * (SP_H - 22)) | 0);
+      for (let yy = 0; yy < h; yy++) {
+        const t = yy / h, half = Math.max(0.5, w * (1 - Math.pow(t, 0.7)) * (0.8 + 0.2 * Math.sin(yy * 0.6))), y = SP_H - 1 - yy;
+        g.fillStyle = '#140724'; g.fillRect(Math.round(x0 - half), y, Math.max(1, Math.round(half * 2)), 1);
+        g.fillStyle = '#4a2160'; g.fillRect(Math.round(x0 - half), y, 1, 1);
+        if (half > 1.5 && r() < 0.07) { g.fillStyle = r() < 0.7 ? '#ffd36a' : '#7affd8'; g.fillRect(Math.round(x0 - half + 1 + r() * (half * 2 - 2)), y, 1, 1); }
+      }
+      if (r() < 0.6) { const by = SP_H - 1 - Math.round(h * (0.4 + r() * 0.4)), br = Math.round(w * 0.9) + 1; for (let dy = -br; dy <= br; dy++) { const hw = Math.round(Math.sqrt(br * br - dy * dy)); g.fillStyle = '#1a0a2e'; g.fillRect(x0 - hw, by + dy, hw * 2 + 1, 1); } g.fillStyle = '#7a3a8a'; g.fillRect(x0 - br + 1, by - 1, 1, 1); }
+      if (h > SP_H * 0.7) beacons.push({ x: x0, y: SP_H - h - 1, p: r() * 6.28 });
+    }
+  }
+
+  /* ── ground: Beast-style bands, each scrolling at its own speed ── */
+  const bands = [];
+  {
+    const total = GE - HZ, hs = []; let sum = 0, k = 1;
+    while (sum < total) { const hh = Math.min(total - sum, Math.max(1, Math.round(k * 0.75))); hs.push(hh); sum += hh; k++; }
+    const N = hs.length, pal = ramp([[0, '#6a2a6a'], [0.35, '#3a1e5a'], [0.7, '#162a4a'], [1, '#0a2a2a']], N);
+    let y = HZ;
+    hs.forEach((hh, i) => {
+      const c = mk(P, hh), g = c.getContext('2d'), img = g.createImageData(P, hh), d = img.data, base = pal[i], t = i / Math.max(1, N - 1);
+      for (let yy = 0; yy < hh; yy++) {
+        let x = 0;
+        while (x < P) {
+          const run = 2 + ((r() * 6) | 0), n = r(), m = n < 0.14 ? 1.4 : n < 0.34 ? 0.72 : 1;
+          for (let j = 0; j < run && x < P; j++, x++) {
+            const mm = (t > 0.4 && r() < 0.05) ? 1.6 : m, ii = (yy * P + x) * 4;
+            d[ii] = Math.min(255, base[0] * mm); d[ii + 1] = Math.min(255, base[1] * mm); d[ii + 2] = Math.min(255, base[2] * mm); d[ii + 3] = 255;
+          }
+        }
+      }
+      g.putImageData(img, 0, 0); bands.push({ c, y, sp: 0.55 + Math.pow(t, 1.4) * 3.4 }); y += hh;
+    });
+  }
+
+  /* ── foreground silhouettes + glowing plants ── */
+  const FG_H = 46, fg = mk(P, FG_H), glow = [];
+  {
+    const g = fg.getContext('2d'), DARK = '#05030c'; g.fillStyle = DARK;
+    for (let x = 0; x < P; x++) { const hh = 4 + Math.round(2 * Math.sin(x * 0.05) + 1.5 * Math.sin(x * 0.13)); g.fillRect(x, FG_H - hh, 1, hh); }
+    for (let k = 0; k < 150; k++) { const x = (r() * P) | 0, h = 4 + ((r() * 14) | 0); g.fillRect(x, FG_H - h - 3, 1, h); if (r() < 0.5) g.fillRect(x + 1, FG_H - h - 1, 1, h - 2); }
+    for (let k = 0; k < 12; k++) {
+      const x = 20 + ((r() * (P - 40)) | 0), R = 4 + ((r() * 9) | 0);
+      g.fillStyle = DARK; for (let dy = 0; dy < R; dy++) { const half = Math.round(Math.sqrt(R * R - dy * dy) * 1.3); g.fillRect(x - half, FG_H - 4 - dy, half * 2, 1); }
+      g.fillStyle = '#2a1636'; g.fillRect(x - Math.round(R * 0.8), FG_H - 4 - R + 1, Math.round(R * 0.9), 1);
+    }
+    for (let k = 0; k < 9; k++) {
+      const x = 20 + ((r() * (P - 40)) | 0), h = 16 + ((r() * 22) | 0), tip = x + Math.round(Math.sin(h * 0.18) * 2);
+      g.fillStyle = DARK; for (let yy = 0; yy < h; yy++) g.fillRect(x + Math.round(Math.sin(yy * 0.18) * 2), FG_H - 4 - yy, 2, 1);
+      g.fillStyle = '#0c3a30'; g.fillRect(tip - 2, FG_H - 4 - h - 3, 6, 3);
+      glow.push({ x: tip + 1, y: FG_H - 4 - h - 2, p: r() * 6.28 });
+    }
+  }
+
+  /* ── the bot: an original little mascot, two-frame walk ── */
+  const BOT = ['.......kk.......', '.......ok.......', '........k.......', '....kkkkkkkk....', '...kwwwwwwwwk...', '...kwkkkkkkwk...', '...kwkkkkkkwk...', '...kwkkkkkkwk...', '...kwwwwwwwwk...', '....kkkkkkkk....', '...kggggggggk...', '..kgkbbbbbbkgk..', '..kgkbwwwwbkgk..', '..kgkbbbbbbkgk..', '...kggggggggk...', '....kkkkkkkk....'];
+  const LEGS = [['.....kk..kk.....', '.....kk...kk....', '....kkk...kkk...'], ['.....kk..kk.....', '....kk...kk.....', '...kkk...kkk....']];
+  const SC = { k: '#05030c', w: '#d8d4f0', g: '#7a74a8', o: '#ff9a3a', b: '#3a6aff' };
+  const botFrames = LEGS.map(legs => { const c = mk(16, 19), g = c.getContext('2d'); BOT.concat(legs).forEach((row, y) => [...row].forEach((ch, x) => { if (SC[ch]) { g.fillStyle = SC[ch]; g.fillRect(x, y, 1, 1); } })); return c; });
+  const flies = Array.from({ length: 22 }, () => ({ x: r() * W, y: 132 + r() * 50, p: r() * 6.28, v: 0.4 + r() * 1.2 }));
+
+  /* ── chrome logo ── */
+  const LS = 5, lm = textMask('AMIGABOT'), lw = lm.w * LS, lh = 7 * LS, on = (x, y) => lm.get(Math.floor(x / LS), Math.floor(y / LS)) && x >= 0 && y >= 0;
+  const logo = mk(lw + 6, lh + 6);
+  {
+    const g = logo.getContext('2d'), cpal = ramp([[0, '#1a2a8a'], [0.3, '#7ad0ff'], [0.45, '#ffffff'], [0.5, '#3a1a08'], [0.62, '#8a4a1a'], [0.85, '#ffb040'], [1, '#fff4a8']], lh);
+    g.fillStyle = '#1a0628'; for (let y = 0; y < lh; y++) for (let x = 0; x < lw; x++) if (on(x, y)) g.fillRect(x + 4, y + 4, 1, 1);
+    g.fillStyle = '#000'; for (let y = -1; y <= lh; y++) for (let x = -1; x <= lw; x++) if (!on(x, y) && (on(x - 1, y) || on(x + 1, y) || on(x, y - 1) || on(x, y + 1))) g.fillRect(x + 1, y + 1, 1, 1);
+    for (let y = 0; y < lh; y++) { g.fillStyle = css(cpal[y]); for (let x = 0; x < lw; x++) if (on(x, y)) g.fillRect(x + 1, y + 1, 1, 1); }
+    g.fillStyle = 'rgba(255,255,255,.6)'; for (let y = 0; y < lh; y++) for (let x = 0; x < lw; x++) if (on(x, y) && !on(x, y - 1)) g.fillRect(x + 1, y + 1, 1, 1);
+  }
+  const LX = Math.round((W - logo.width) / 2), LY = 12;
+  const wob = (row, t) => Math.round(Math.sin(t * 0.04 + row * 0.18) * 2);
+  const tagline = textCanvas('signals from the retro amiga scene', '#ffd8f4', 1, '#1a0628');
+  const hint = textCanvas('click for sound', '#ffffff', 1, '#000000'), paulaTxt = textCanvas('paula', '#7affd8', 1, '#000000');
+
+  /* ── scroller ── */
+  const hot = F.items.filter(i => i.heat >= 4).map(i => i.title);
+  const msg = norm('      amigabot is watching the scene    *** ' + hot.join('   *** ') + '   ***   greetings to every coder, artist, musician and swapper still keeping the amiga alive   ***   a decibel production   ***   wrap!      ');
+  const sPal = ramp([[0, '#ff4a6a'], [0.3, '#ffd36a'], [0.5, '#ffffff'], [0.7, '#7ad0ff'], [1, '#3a5aff']], 14);
+  const strip = textCanvas(msg, sPal, 2, '#000000');
+  const CW = 12, RAIN = ramp([[0, '#ff3a6a'], [0.2, '#ffb03a'], [0.4, '#f8ff6a'], [0.6, '#3affb0'], [0.8, '#3a8aff'], [1, '#ff3a6a']], 48);
+
+  /* ── part 2 assets: plasma, ball sprites, morph shapes ── */
+  const PW = 96, PH = 50, plasma = mk(PW, PH), pg = plasma.getContext('2d'), pimg = pg.createImageData(PW, PH);
+  const PPAL = ramp([[0, '#10002a'], [0.2, '#4a0a6a'], [0.4, '#c0306a'], [0.55, '#ff9a4a'], [0.7, '#3ac0c0'], [0.85, '#1a3a9a'], [1, '#10002a']], 128);
+  const balls = [2, 3, 4, 5].map(R => {
+    const c = mk(R * 2 + 1, R * 2 + 1), g = c.getContext('2d'), pal = ramp([[0, '#2a0a4a'], [0.5, '#c04aa0'], [0.85, '#ffc0f0'], [1, '#ffffff']], 10);
+    for (let y = -R; y <= R; y++) for (let x = -R; x <= R; x++) {
+      const q = (x * x + y * y) / (R * R); if (q > 1) continue;
+      const lum = Math.max(0, 1 - Math.hypot(x + R * 0.4, y + R * 0.4) / (R * 1.5));
+      g.fillStyle = css(pick(pal, 0.15 + lum * 0.85, x + R, y + R)); g.fillRect(x + R, y + R, 1, 1);
+    }
+    return c;
+  });
+  const NB = 64;
+  const SHAPES = [
+    Array.from({ length: NB }, (_, i) => { const y = 1 - (i / (NB - 1)) * 2, rr = Math.sqrt(1 - y * y), th = i * 2.39996; return [Math.cos(th) * rr, y, Math.sin(th) * rr]; }),
+    Array.from({ length: NB }, (_, i) => { const a = (i % 16) / 16 * 6.283, b = Math.floor(i / 16) / 4 * 6.283; return [(1 + 0.42 * Math.cos(b)) * Math.cos(a) * 0.75, 0.42 * Math.sin(b) * 0.75, (1 + 0.42 * Math.cos(b)) * Math.sin(a) * 0.75]; }),
+    Array.from({ length: NB }, (_, i) => { const e = (i / NB) * 12 | 0, s = (i % (NB / 12)) / (NB / 12 - 1) * 2 - 1, E = [[0, 1, 1], [0, 1, -1], [0, -1, 1], [0, -1, -1], [1, 0, 1], [1, 0, -1], [-1, 0, 1], [-1, 0, -1], [1, 1, 0], [1, -1, 0], [-1, 1, 0], [-1, -1, 0]][e]; return E.map(v => v === 0 ? s * 0.7 : v * 0.7); }),
+    Array.from({ length: NB }, (_, i) => { const a = i / NB * 6.283 * 3, s = i / NB * 2 - 1; return [Math.cos(a) * 0.5 * (i % 2 ? 1 : -1), s, Math.sin(a) * 0.5 * (i % 2 ? 1 : -1)]; })
+  ];
+
+  /* ── drawing helpers ── */
+  function wrapDraw(img, y, off) {
+    const w = img.width, ox = ((Math.floor(off) % w) + w) % w, first = Math.min(W, w - ox);
+    ctx.drawImage(img, ox, 0, first, img.height, 0, y, first, img.height);
+    if (first < W) ctx.drawImage(img, 0, 0, W - first, img.height, first, y, W - first, img.height);
+    return ox;
+  }
+  const scr = (x, ox, w) => ((x - ox) % w + w) % w;
+  const SUN = ramp([[0, '#fff6c0'], [0.5, '#ffb04a'], [1, '#ff4a7a']], 16);
+
+  function world(t) {
+    ctx.drawImage(sky, 0, 0);
+    for (const s of stars) if (Math.sin(t * s.s + s.p) > -0.3) { ctx.fillStyle = Math.sin(t * s.s * 2 + s.p) > 0.85 ? '#ffffff' : '#9a8ad8'; ctx.fillRect(s.x, s.y, 1, 1); }
+    // sun with scrolling cut bands
+    const cx = 192, cy = HZ - 32, R = 30;
+    for (let dy = -R; dy <= R; dy++) {
+      const y = cy + dy; if (y >= HZ) break;
+      if (dy > -6) { const gap = 1 + Math.floor(((dy + 6) / (R + 6)) * 4); if ((((dy + Math.floor(t * 0.25)) % 7) + 7) % 7 < gap) continue; }
+      const half = Math.sqrt(R * R - dy * dy); ctx.fillStyle = css(SUN[Math.floor(((dy + R) / (2 * R)) * 15)]); ctx.fillRect(Math.round(cx - half), y, Math.round(half * 2), 1);
+    }
+    wrapDraw(clouds, HZ - 74, t * 0.12);
+    wrapDraw(L0, HZ - L0.height, t * 0.06);
+    wrapDraw(L1, HZ - L1.height, t * 0.14);
+    const sox = wrapDraw(spires, HZ - SP_H + 4, t * 0.28);
+    for (const b of beacons) { const x = scr(b.x, sox, P); if (x < W && Math.sin(t * 0.12 + b.p) > 0.4) { ctx.fillStyle = '#ff3a3a'; ctx.fillRect(x, HZ - SP_H + 4 + b.y, 1, 1); } }
+    wrapDraw(L3, HZ - L3.height + 2, t * 0.45);
+    for (const b of bands) wrapDraw(b.c, b.y, t * b.sp);
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 14; i++) { const hw = 64 - i * 3; ctx.fillStyle = `rgba(255,130,80,${0.11 * (1 - i / 14)})`; ctx.fillRect(192 - hw, HZ + i, hw * 2, 1); }
+    ctx.globalCompositeOperation = 'source-over';
+    for (const f of flies) { f.x -= f.v * 0.5; if (f.x < 0) f.x += W; if (Math.sin(t * 0.08 + f.p) > -0.2) { ctx.fillStyle = '#b8ffde'; ctx.fillRect(f.x | 0, (f.y + Math.sin(t * 0.05 + f.p) * 3) | 0, 1, 1); } }
+    // the bot
+    const fr = Math.floor(t / 7) % 2, bx = 104, by = 166 - fr;
+    ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fillRect(bx + 3, 185, 10, 1); ctx.fillRect(bx + 5, 186, 6, 1);
+    ctx.drawImage(botFrames[fr], bx, by);
+    ctx.fillStyle = css(mix('#ff3a6a', '#7affd8', (Math.sin(t * 0.1) + 1) / 2)); ctx.fillRect(bx + 6, by + 6, 1, 1); ctx.fillRect(bx + 9, by + 6, 1, 1);
+    if ((t >> 4) & 1) { ctx.fillStyle = '#ffd36a'; ctx.fillRect(bx + 7, by + 1, 1, 1); }
+    const fox = wrapDraw(fg, GE - FG_H, t * 4.2);
+    for (const gl of glow) { const x = scr(gl.x, fox, P); if (x < W) { ctx.fillStyle = Math.sin(t * 0.09 + gl.p) > 0 ? '#7affd8' : '#2aa08a'; ctx.fillRect(x - 1, GE - FG_H + gl.y, 3, 1); } }
+  }
+
+  function demoPart(t) {
+    // chunky plasma, palette cycled
+    const d = pimg.data, cyc = Math.floor(t * 0.9);
+    for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
+      const v = Math.sin(x * 0.11 + t * 0.03) + Math.sin(y * 0.13 - t * 0.021) + Math.sin((x + y) * 0.07 + t * 0.017) + Math.sin(Math.hypot(x - 48 + Math.sin(t * 0.01) * 20, y - 25) * 0.16 - t * 0.04);
+      const c = PPAL[(((v + 4) * 16 | 0) + cyc) & 127], i = (y * PW + x) * 4;
+      d[i] = c[0] * 0.75; d[i + 1] = c[1] * 0.75; d[i + 2] = c[2] * 0.75; d[i + 3] = 255;
+    }
+    pg.putImageData(pimg, 0, 0);
+    ctx.drawImage(plasma, 0, 0, PW, PH, 0, 0, W, GE + 6);
+    // copper raster bars
+    const bars = ['#ff3a6a', '#ffb03a', '#3affb0', '#3a8aff', '#d03aff'];
+    bars.forEach((c, k) => {
+      const y = Math.round(100 + Math.sin(t * 0.035 + k * 0.7) * 70), pal = ramp([[0, '#000000'], [0.5, c], [0.62, '#ffffff'], [1, '#000000']], 13);
+      for (let j = 0; j < 13; j++) { ctx.fillStyle = css(pal[j]); ctx.fillRect(0, y + j - 6, W, 1); }
+    });
+    // vector bobs, morphing between shapes
+    const si = Math.floor(t / 300) % SHAPES.length, A = SHAPES[si], B = SHAPES[(si + 1) % SHAPES.length];
+    const m = Math.min(1, Math.max(0, ((t % 300) - 240) / 60)), ease = m * m * (3 - 2 * m);
+    const ax = t * 0.021, ay = t * 0.027, az = t * 0.013, [sx, cx_, sy, cy_, sz, cz] = [Math.sin(ax), Math.cos(ax), Math.sin(ay), Math.cos(ay), Math.sin(az), Math.cos(az)];
+    const pts = [];
+    for (let i = 0; i < NB; i++) {
+      let [x, y, z] = A[i].map((v, k) => v + (B[i][k] - v) * ease);
+      [y, z] = [y * cx_ - z * sx, y * sx + z * cx_]; [x, z] = [x * cy_ + z * sy, -x * sy + z * cy_]; [x, y] = [x * cz - y * sz, x * sz + y * cz];
+      const s = 178 / (z + 3.2); pts.push([192 + x * s, 108 + y * s, z]);
+    }
+    pts.sort((a, b) => b[2] - a[2]);
+    for (const [x, y, z] of pts) { const bi = Math.max(0, Math.min(3, Math.round((1 - z) * 1.6))), b = balls[bi]; ctx.drawImage(b, Math.round(x - b.width / 2), Math.round(y - b.height / 2)); }
+  }
+
+  function overlay(t, part) {
+    // chrome logo, wobbling row by row, with a travelling glint
+    for (let ry = 0; ry < logo.height; ry++) ctx.drawImage(logo, 0, ry, logo.width, 1, LX + wob(ry - 1, t), LY + ry, logo.width, 1);
+    const gp = Math.floor(t * 2.2) % (lw + lh + 260) - lh;
+    ctx.fillStyle = '#ffffff';
+    for (let y = 0; y < lh; y++) { const x = gp - y; if (on(x, y)) ctx.fillRect(LX + 1 + x + wob(y, t), LY + 1 + y, 1, 1); if (on(x + 1, y)) ctx.fillRect(LX + 2 + x + wob(y, t), LY + 1 + y, 1, 1); }
+    ctx.drawImage(tagline, Math.round((W - tagline.width) / 2), LY + logo.height + 3);
+    // HUD: paula VU or blinking hint
+    if (Paula.on) {
+      ctx.drawImage(paulaTxt, 8, GE - 30); Paula.decay();
+      for (let i = 0; i < 4; i++) { const hgt = Math.round(Paula.lv[i] * 16); for (let j = 0; j < hgt; j++) { ctx.fillStyle = j > 12 ? '#ff4a3a' : j > 8 ? '#ffd36a' : '#3affb0'; ctx.fillRect(9 + i * 6, GE - 6 - j, 4, 1); } }
+    } else if ((Math.floor(t / 32)) % 2) ctx.drawImage(hint, 8, GE - 12);
+    // lower border: copper line + sine scroller
+    ctx.fillStyle = '#000'; ctx.fillRect(0, GE, W, H - GE);
+    for (let x = 0; x < W; x += 4) { ctx.fillStyle = css(RAIN[(Math.floor(x / 4 + t * 0.6)) % 48]); ctx.fillRect(x, GE, 4, 1); ctx.fillRect(W - x - 4, H - 1, 4, 1); }
+    const sx = Math.floor(t * 1.6) % (msg.length * CW);
+    for (let i = Math.floor(sx / CW); i < msg.length; i++) {
+      const x = i * CW - sx; if (x > W) break;
+      const dy = Math.round(Math.sin((x + t * 2) * 0.035) * 3);
+      ctx.drawImage(strip, i * CW, 0, CW, strip.height, x, GE + 4 + dy, CW, strip.height);
+    }
+    // part indicator
+    ctx.fillStyle = '#ffffff'; for (let k = 0; k < 2; k++) ctx.fillRect(W - 14 + k * 5, 7, 3, k === part ? 3 : 1);
+  }
+
+  let lastPart = -1, flash = 0;
+  function frame(t) {
+    const part = Math.floor(t / PART_LEN) % 2;
+    if (part !== lastPart) { if (lastPart !== -1) flash = 14; lastPart = part; }
+    if (part === 0) world(t); else demoPart(t);
+    overlay(t, part);
+    if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash / 14})`; ctx.fillRect(0, 0, W, H); flash--; }
+  }
+
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) { frame(400); return; }
+  let visible = true;
+  new IntersectionObserver(e => { const was = visible; visible = e[0].isIntersecting; if (visible && !was) requestAnimationFrame(loop); }).observe(cv);
+  function loop(ts) { if (!visible) return; frame(ts / 20); requestAnimationFrame(loop); }   // 50 ticks a second, PAL
+  requestAnimationFrame(loop);
+  window.__amigabot = { frame, pause() { visible = false; } };   // handy for screenshots and debugging
 }
 </script>
 </body>
