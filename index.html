@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amigabot</title>
+<meta name="description" content="Amigabot keeps tabs on the retro Amiga scene. Built by Decibel.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+  /* Workbench 1.3 palette — four colours, like the real thing */
+  :root {
+    --blue:   #0055aa;
+    --white:  #ffffff;
+    --black:  #000022;
+    --orange: #ff8800;
+    --blue-d: #003f80;
+    --font: 'VT323', 'Courier New', monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--blue);
+    color: var(--white);
+    font: 22px/1.15 var(--font);
+    -webkit-font-smoothing: none;
+    image-rendering: pixelated;
+    min-height: 100vh;
+  }
+  a { color: var(--white); }
+  a:hover { color: var(--orange); }
+  button { font: inherit; cursor: pointer; }
+
+  /* ── screen title bar ───────────────────────── */
+  .screenbar {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; gap: 18px; align-items: center;
+    background: var(--white); color: var(--blue);
+    padding: 1px 10px; white-space: nowrap; overflow: hidden;
+    border-bottom: 2px solid var(--black);
+  }
+  .screenbar b { color: var(--black); font-weight: normal; }
+  .screenbar .grow { flex: 1; }
+  .screenbar .depth { display: flex; gap: 2px; }
+  .screenbar .depth i { display: block; width: 18px; height: 16px; border: 2px solid var(--blue); }
+  .screenbar .depth i:last-child { background: var(--blue); }
+
+  /* ── copper bars + scroller ─────────────────── */
+  .copper { position: relative; height: 120px; background: var(--black); overflow: hidden; }
+  .copper canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* ── desktop layout ─────────────────────────── */
+  .desk {
+    display: grid; gap: 18px;
+    grid-template-columns: 132px minmax(0, 1fr) 340px;
+    padding: 18px 16px 40px;
+    max-width: 1440px; margin: 0 auto;
+  }
+  @media (max-width: 1100px) { .desk { grid-template-columns: 112px minmax(0, 1fr); } .side { grid-column: 1 / -1; } }
+  @media (max-width: 680px)  {
+    body { font-size: 20px; }
+    .desk { grid-template-columns: minmax(0, 1fr); padding: 12px 16px 32px; }
+    .drawers { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; }
+    .icon svg { width: 36px; height: 36px; }
+    .icon span { font-size: .85em; }
+    .signals .sig { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+    .signals .sig .heat { padding-top: 0; }
+    .screenbar .hide-sm { display: none; }
+  }
+
+  /* ── drawer icons ───────────────────────────── */
+  .drawers { display: flex; flex-direction: column; gap: 6px; }
+  .icon {
+    background: none; border: 0; color: var(--white); padding: 4px 2px;
+    display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center;
+  }
+  .icon svg { width: 48px; height: 48px; }
+  .icon span { padding: 0 4px; }
+  .icon .n { color: var(--orange); }
+  .icon[aria-pressed="true"] span { background: var(--white); color: var(--blue); }
+  .icon[aria-pressed="true"] .n { color: var(--orange); }
+  .icon[aria-pressed="true"] svg { filter: invert(1) hue-rotate(180deg); }
+  .icon:focus-visible { outline: 2px dashed var(--orange); }
+
+  /* ── windows ────────────────────────────────── */
+  .win { border: 2px solid var(--white); background: var(--blue); min-width: 0; }
+  .win + .win { margin-top: 18px; }
+  .titlebar {
+    display: flex; align-items: center; gap: 8px; height: 26px;
+    background: repeating-linear-gradient(to bottom, var(--white) 0 2px, var(--blue) 2px 4px);
+    border-bottom: 2px solid var(--white); padding: 0 4px;
+  }
+  .titlebar .close { width: 22px; height: 18px; background: var(--blue); border: 2px solid var(--white); display: grid; place-items: center; }
+  .titlebar .close::after { content: ''; width: 6px; height: 6px; background: var(--white); }
+  .titlebar h2 { margin: 0; font-size: inherit; font-weight: normal; background: var(--blue); padding: 0 6px; }
+  .titlebar .grow { flex: 1; }
+  .titlebar .gad { width: 22px; height: 18px; background: var(--blue); border: 2px solid var(--white); position: relative; }
+  .titlebar .gad::after { content: ''; position: absolute; left: 3px; top: 2px; width: 9px; height: 7px; border: 2px solid var(--white); }
+  .body { padding: 10px 12px; }
+
+  /* ── signals list ───────────────────────────── */
+  .filterline { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; padding: 6px 12px; border-bottom: 2px solid var(--white); }
+  .filterline .grow { flex: 1; }
+  .chk { background: none; border: 0; color: var(--white); padding: 0; }
+  .chk::before { content: '[ ] '; color: var(--orange); }
+  .chk[aria-pressed="true"]::before { content: '[x] '; }
+  .signals { list-style: none; margin: 0; padding: 0; }
+  .sig { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 4px 14px; padding: 12px; border-bottom: 2px dotted rgba(255,255,255,.35); }
+  .sig:last-child { border-bottom: 0; }
+  .sig .heat { display: flex; gap: 3px; align-items: center; padding-top: 6px; }
+  .sig .heat i { width: 10px; height: 14px; border: 2px solid var(--white); }
+  .sig .heat i.on { background: var(--orange); border-color: var(--orange); }
+  .sig .meta { color: var(--orange); font-size: .9em; display: flex; flex-wrap: wrap; gap: 0 12px; }
+  .sig .meta .tag { color: var(--black); background: var(--orange); padding: 0 5px; }
+  .sig .meta .unv { color: var(--white); border: 1px dashed var(--white); padding: 0 5px; }
+  .sig h3 { margin: 2px 0 2px; font-size: 1.12em; font-weight: normal; line-height: 1.05; }
+  .sig h3 a { text-decoration: none; }
+  .sig h3 a:hover { text-decoration: underline; }
+  .sig p { margin: 0; opacity: .92; }
+  .sig .src { font-size: .9em; margin-top: 4px; }
+  .sig .src a { color: var(--orange); }
+  .sig.hot h3 { color: var(--white); text-shadow: 2px 2px 0 var(--black); }
+  .empty { padding: 30px 12px; text-align: center; opacity: .8; }
+
+  /* ── threads ────────────────────────────────── */
+  .thread { padding: 10px 0; border-bottom: 2px dotted rgba(255,255,255,.35); }
+  .thread:last-child { border-bottom: 0; }
+  .thread .row { display: flex; gap: 8px; align-items: baseline; }
+  .led { width: 12px; height: 12px; display: inline-block; border: 2px solid var(--white); flex: none; transform: translateY(1px); }
+  .led.heating { background: var(--orange); border-color: var(--orange); animation: blink 1s steps(2) infinite; }
+  .led.watching { background: var(--white); }
+  .led.cooling { background: transparent; }
+  @keyframes blink { 50% { opacity: .2; } }
+  .thread h4 { margin: 0; font-weight: normal; font-size: 1.05em; }
+  .thread .q { margin: 2px 0 0 20px; opacity: .85; font-size: .92em; }
+  .thread .cd { margin: 4px 0 0 20px; color: var(--black); background: var(--orange); display: inline-block; padding: 0 6px; }
+  .thread .n { color: var(--orange); margin-left: auto; }
+
+  /* ── paula meters (signals per beat) ───────── */
+  .meters { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; align-items: end; height: 130px; padding-top: 6px; }
+  .meter { display: flex; flex-direction: column-reverse; gap: 2px; height: 100%; }
+  .meter i { height: 8px; background: var(--white); opacity: .15; }
+  .meter i.on { opacity: 1; }
+  .meter i.on.hi { background: var(--orange); }
+  .meterlabels { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; font-size: .62em; text-align: center; margin-top: 4px; letter-spacing: -.02em; }
+
+  /* ── about / footer ─────────────────────────── */
+  .about p { margin: 0 0 8px; }
+  .about code { color: var(--orange); }
+  footer { text-align: center; padding: 0 16px 24px; opacity: .8; font-size: .9em; }
+
+  /* ── guru meditation (shown if feed fails) ─── */
+  .guru { display: none; margin: 30px auto; max-width: 720px; background: var(--black); color: #ff2a2a; border: 6px solid #ff2a2a; padding: 16px; text-align: center; animation: guru 1s steps(2) infinite; }
+  @keyframes guru { 50% { border-color: var(--black); } }
+  body.broken .guru { display: block; }
+  body.broken .desk { display: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .led.heating, .guru { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="screenbar" role="banner">
+  <b>Amigabot</b>
+  <span id="sb-count">— signals</span>
+  <span class="hide-sm" id="sb-sweep">last sweep —</span>
+  <span class="grow"></span>
+  <span class="hide-sm" id="sb-mem">— chip mem free</span>
+  <span class="depth" aria-hidden="true"><i></i><i></i></span>
+</div>
+
+<div class="copper" aria-hidden="true"><canvas id="copper"></canvas></div>
+
+<div class="guru" role="alert">
+  Software Failure. &nbsp; Press left mouse button to continue.<br>
+  Guru Meditation #00000004.0000FEED &nbsp;—&nbsp; couldn't read data/. Serve the repo root, or run <code>node scripts/build.mjs</code>.
+</div>
+
+<main class="desk">
+  <nav class="drawers" id="drawers" aria-label="Beats"></nav>
+
+  <section class="win" aria-labelledby="w-signals">
+    <div class="titlebar"><span class="close"></span><h2 id="w-signals">Signals</h2><span class="grow"></span><span class="gad"></span></div>
+    <div class="filterline">
+      <button class="chk" id="f-hot" aria-pressed="false">heat 4+</button>
+      <button class="chk" id="f-unv" aria-pressed="false">hide unverified</button>
+      <span class="grow"></span>
+      <span id="f-shown"></span>
+    </div>
+    <ol class="signals" id="signals"></ol>
+  </section>
+
+  <aside class="side">
+    <section class="win" aria-labelledby="w-threads">
+      <div class="titlebar"><span class="close"></span><h2 id="w-threads">Threads</h2><span class="grow"></span><span class="gad"></span></div>
+      <div class="body" id="threads"></div>
+    </section>
+
+    <section class="win" aria-labelledby="w-paula">
+      <div class="titlebar"><span class="close"></span><h2 id="w-paula">Paula · signals per beat</h2><span class="grow"></span><span class="gad"></span></div>
+      <div class="body"><div class="meters" id="meters"></div><div class="meterlabels" id="meterlabels"></div></div>
+    </section>
+
+    <section class="win about" aria-labelledby="w-about">
+      <div class="titlebar"><span class="close"></span><h2 id="w-about">About</h2><span class="grow"></span><span class="gad"></span></div>
+      <div class="body">
+        <p>An agent sweeps the Amiga scene's news sites, forums and party archives, files what it finds by beat and heat, and keeps following the stories that matter.</p>
+        <p>Every signal links to its source. Items marked <span style="border:1px dashed #fff;padding:0 4px">unverified</span> were tipped in by hand and haven't been checked by a sweep yet.</p>
+        <p>A <a href="https://decibel.systems">Decibel</a> watcher. Source: <a id="repo" href="https://github.com/mediareason/amigabot">mediareason/amigabot</a></p>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<footer id="foot"></footer>
+
+<script src="feed.js"></script>
+<script>
+// Data: window.WATCH_FEED when built locally (node scripts/build.mjs → feed.js,
+// works from file://). On GitHub Pages there is no feed.js; read data/ directly.
+async function loadFeed() {
+  if (window.WATCH_FEED) return window.WATCH_FEED;
+  const get = (p) => fetch(p, { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error(p); return r.text(); });
+  const [site, threads, items] = await Promise.all([get('data/site.json'), get('data/threads.json'), get('data/items.jsonl')]);
+  const list = items.split('\n').filter(l => l.trim()).map(l => JSON.parse(l))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.heat - a.heat);
+  const counts = {}; list.forEach(i => { counts[i.beat] = (counts[i.beat] || 0) + 1; });
+  const s = JSON.parse(site);
+  return { site: s, threads: JSON.parse(threads), items: list, counts, built_at: s.last_sweep };
+}
+loadFeed().then(boot, () => { document.body.classList.add('broken'); document.querySelector('.guru').onclick = () => location.reload(); });
+
+function boot(F) {
+
+  const BEATS = [
+    ['hardware', 'Hardware', 'chip'], ['games', 'Games', 'joy'], ['scene', 'Scene', 'disk'],
+    ['software', 'Software', 'wb'], ['emulation', 'Emulation', 'screen'], ['events', 'Events', 'flag'],
+    ['press', 'Press', 'mag'], ['biz', 'Business', 'key']
+  ];
+  const LABEL = Object.fromEntries(BEATS.map(b => [b[0], b[1]]));
+
+  // 12x12 pixel icons, original. . = empty, # = white, o = orange, k = black
+  const PIX = {
+    chip:   ['............','..#.#.#.#...','.#########..','.#kkkkkkk#..','##kooooook##','.#kooooook#.','##kooooook##','.#kooooook#.','.#kkkkkkk#..','.#########..','..#.#.#.#...','............'],
+    joy:    ['............','....oo......','...oooo.....','...oooo.....','....oo......','.....#......','.....#......','..########..','.##kkkkkk##.','.#kk#kkkkk#.','.##########.','............'],
+    disk:   ['############','#kk######kk#','#kk#kk###kk#','#kk#kk###kk#','#kk######kk#','#kkkkkkkkkk#','#k########k#','#k#oooooo#k#','#k#oooooo#k#','#k########k#','############','............'],
+    wb:     ['############','#oo#######o#','############','#kkkkkkkkkk#','#k########k#','#k#oo#oo##k#','#k########k#','#k##oo#oo#k#','#k########k#','#kkkkkkkkkk#','############','............'],
+    screen: ['............','.##########.','.#kkkkkkkk#.','.#koooooak#.','.#kooookkk#.','.#kookkkkk#.','.#kkkkkkkk#.','.##########.','.....##.....','...######...','............','............'],
+    flag:   ['............','.#oooooo....','.#oooooooo..','.#oooooooo..','.#oooooo....','.#..........','.#..........','.#..........','.#..........','.#..........','####........','............'],
+    mag:    ['............','.#########..','.#kkkkkkk##.','.#koooook#k#','.#kkkkkkk#k#','.#k#####k#k#','.#k#####k#k#','.#k###k#k#k#','.#kkkkkkk#k#','.#########k#','..kkkkkkkkk#','............'],
+    key:    ['............','..####......','.#oooo#.....','#oo..oo#....','#oo..oo#....','.#oooo######','..####oooooo','......o#o#o.','......o.o.o.','............','............','............']
+  };
+  const COL = { '#': '#ffffff', o: '#ff8800', k: '#000022', a: '#ff8800' };
+  const icon = (name) => {
+    const rows = PIX[name] || PIX.disk; let r = '';
+    rows.forEach((row, y) => [...row].forEach((c, x) => { if (COL[c]) r += `<rect x="${x}" y="${y}" width="1" height="1" fill="${COL[c]}"/>`; }));
+    return `<svg viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true">${r}</svg>`;
+  };
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const fmt = (d, approx) => {
+    const t = new Date(d + 'T12:00:00');
+    return approx ? t.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  // ── state (remembered per viewer; storage may be unavailable) ──
+  const store = { get(k, d) { try { const v = localStorage.getItem('amigabot:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+                  set(k, v) { try { localStorage.setItem('amigabot:' + k, JSON.stringify(v)); } catch {} } };
+  const S = { beat: store.get('beat', null), hot: store.get('hot', false), unv: store.get('unv', false) };
+
+  // ── screen bar ──
+  const sw = new Date(F.site.last_sweep);
+  document.getElementById('sb-count').textContent = `${F.items.length} signals`;
+  document.getElementById('sb-sweep').textContent = `last sweep ${sw.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${sw.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+  document.getElementById('sb-mem').textContent = `${(524288 - F.items.length * 512).toLocaleString('en-US')} chip mem free`;
+  if (F.site.repo) document.getElementById('repo').href = F.site.repo;
+
+  // ── drawers ──
+  const drawers = document.getElementById('drawers');
+  drawers.innerHTML = [['all', 'All', 'disk']].concat(BEATS).map(([id, label, ic]) => {
+    const n = id === 'all' ? F.items.length : (F.counts[id] || 0);
+    return `<button class="icon" data-beat="${id}" aria-pressed="false">${icon(ic)}<span>${label} <span class="n">${n}</span></span></button>`;
+  }).join('');
+  drawers.addEventListener('click', (e) => {
+    const b = e.target.closest('.icon'); if (!b) return;
+    S.beat = b.dataset.beat === 'all' ? null : b.dataset.beat; store.set('beat', S.beat); render();
+  });
+  const tgl = (id, key) => document.getElementById(id).addEventListener('click', () => { S[key] = !S[key]; store.set(key, S[key]); render(); });
+  tgl('f-hot', 'hot'); tgl('f-unv', 'unv');
+
+  // ── signals ──
+  function render() {
+    drawers.querySelectorAll('.icon').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.beat === 'all' && !S.beat) || b.dataset.beat === S.beat)));
+    document.getElementById('f-hot').setAttribute('aria-pressed', String(S.hot));
+    document.getElementById('f-unv').setAttribute('aria-pressed', String(S.unv));
+    const list = F.items.filter(i => (!S.beat || i.beat === S.beat) && (!S.hot || i.heat >= 4) && (!S.unv || i.verified !== false));
+    document.getElementById('f-shown').textContent = `${list.length} of ${F.items.length}`;
+    document.getElementById('signals').innerHTML = list.length ? list.map(i => `
+      <li class="sig${i.heat >= 5 ? ' hot' : ''}">
+        <div class="heat" title="heat ${i.heat} of 5">${[1, 2, 3, 4, 5].map(n => `<i class="${n <= i.heat ? 'on' : ''}"></i>`).join('')}</div>
+        <div>
+          <div class="meta"><span>${esc(fmt(i.date, i.date_approx))}</span><span class="tag">${esc(LABEL[i.beat] || i.beat)}</span>${i.thread ? `<span>&#9654; ${esc((F.threads.find(t => t.id === i.thread) || {}).title || i.thread)}</span>` : ''}${i.verified === false ? '<span class="unv">unverified</span>' : ''}</div>
+          <h3><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a></h3>
+          <p>${esc(i.summary)}</p>
+          <div class="src">via <a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.source)}</a>${(i.links || []).map((l, k) => ` · <a href="${esc(l)}" target="_blank" rel="noopener">more ${k + 1}</a>`).join('')}</div>
+        </div>
+      </li>`).join('') : '<li class="empty">No signals in this drawer. Insert disk.</li>';
+  }
+
+  // ── threads ──
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  document.getElementById('threads').innerHTML = F.threads.map(t => {
+    const n = F.items.filter(i => i.thread === t.id).length;
+    let cd = '';
+    if (t.next) {
+      const days = Math.round((new Date(t.next + 'T00:00:00') - today) / 864e5);
+      cd = `<div class="cd">${esc(t.next_label || 'Next')}: ${days > 0 ? `T-${days} days` : days === 0 ? 'TODAY' : `${-days}d ago`}</div>`;
+    }
+    return `<div class="thread"><div class="row"><span class="led ${esc(t.status)}" title="${esc(t.status)}"></span><h4>${esc(t.title)}</h4><span class="n">${n}</span></div><p class="q">${esc(t.question)}</p>${cd}</div>`;
+  }).join('');
+
+  // ── paula meters ──
+  const max = Math.max(1, ...BEATS.map(b => F.counts[b[0]] || 0)), SEG = 12;
+  document.getElementById('meters').innerHTML = BEATS.map(([id]) => {
+    const lit = Math.round(((F.counts[id] || 0) / max) * SEG);
+    return `<div class="meter" title="${LABEL[id]}: ${F.counts[id] || 0}">${Array.from({ length: SEG }, (_, k) => `<i class="${k < lit ? 'on' : ''}${k >= SEG - 3 ? ' hi' : ''}"></i>`).join('')}</div>`;
+  }).join('');
+  document.getElementById('meterlabels').innerHTML = BEATS.map(b => `<span>${b[1].slice(0, 4)}</span>`).join('');
+
+  document.getElementById('foot').textContent = `${F.site.sweeps} sweep${F.site.sweeps === 1 ? '' : 's'} so far · updated ${new Date(F.built_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}`;
+  render();
+
+  // ── copper bars + sine scroller ──
+  const cv = document.getElementById('copper'), cx = cv.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const hot = F.items.filter(i => i.heat >= 4).map(i => i.title.toUpperCase());
+  const msg = '      *** AMIGABOT ***   GREETINGS TO THE SCENE   ***   ' + hot.join('   ***   ') + '   ***   WRAP!      ';
+  let W, H, x = 0, t = 0;
+  function size() { const r = window.devicePixelRatio || 1; W = cv.clientWidth; H = cv.clientHeight; cv.width = W * r; cv.height = H * r; cx.setTransform(r, 0, 0, r, 0, 0); }
+  size(); addEventListener('resize', size);
+  const bars = ['#ff8800', '#ffffff', '#0055aa', '#ff2a6d', '#22ddaa'];
+  function frame() {
+    cx.fillStyle = '#000022'; cx.fillRect(0, 0, W, H);
+    // copper bars: rasters bobbing on sine paths
+    bars.forEach((c, k) => {
+      const y = H / 2 + Math.sin(t / 40 + k * 0.9) * (H / 2 - 12);
+      const g = cx.createLinearGradient(0, y - 9, 0, y + 9);
+      g.addColorStop(0, '#000022'); g.addColorStop(0.5, c); g.addColorStop(1, '#000022');
+      cx.fillStyle = g; cx.fillRect(0, y - 9, W, 18);
+    });
+    // scroller
+    cx.font = '48px VT323, monospace'; cx.textBaseline = 'middle';
+    const cw = Math.ceil(cx.measureText('M').width) + 2;
+    for (let i = 0; i < msg.length; i++) {
+      const px = i * cw - x; if (px < -cw) continue; if (px > W) break;
+      const py = H / 2 + Math.sin((px + t * 3) / 70) * 22;
+      cx.fillStyle = '#000022'; cx.fillText(msg[i], px + 3, py + 3);
+      cx.fillStyle = '#ffffff'; cx.fillText(msg[i], px, py);
+    }
+    x = (x + 2) % (msg.length * cw); t++;
+    if (!reduce) requestAnimationFrame(frame);
+  }
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(frame);
+}
+</script>
+</body>
+</html>
