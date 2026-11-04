@@ -1,0 +1,46 @@
+[
+  {
+    "id": "thea1200",
+    "title": "THEA1200 launch",
+    "status": "watching",
+    "next": "2026-12-04",
+    "next_label": "Launch day",
+    "question": "Does it ship on 4 Dec, and how is the OS/Workbench experience received?",
+    "links": [
+      "https://www.youtube.com/watch?v=atZFmK9aOCI",
+      "https://www.youtube.com/watch?v=Dy4B1lk9CU8"
+    ]
+  },
+  {
+    "id": "ai-and-the-scene",
+    "title": "AI and the Amiga scene",
+    "status": "heating",
+    "next": null,
+    "next_label": null,
+    "question": "AI-assisted ports keep shipping while the community poll runs negative. Where does the line settle?"
+  },
+  {
+    "id": "tachyon",
+    "title": "Tachyon browser for 68k",
+    "status": "watching",
+    "next": null,
+    "next_label": null,
+    "question": "Does a usable public build of a modern browser for classic AmigaOS appear?"
+  },
+  {
+    "id": "names",
+    "title": "Amiga names & AmigaOS future",
+    "status": "watching",
+    "next": null,
+    "next_label": null,
+    "question": "With the truce done, when do AmigaOS 3.3 and the next OS4 update ship, and who builds on the Amiga name?"
+  },
+  {
+    "id": "reassembler",
+    "title": "Reassembler's arcade ports",
+    "status": "watching",
+    "next": null,
+    "next_label": null,
+    "question": "When does Aonic get a playable build, and what follows OutRun?"
+  }
+]
